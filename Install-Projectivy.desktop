@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Projectivy Launcher setup
+GenericName=Fire TV Stick setup
+Comment=Replace the Amazon Fire TV home screen with Projectivy Launcher
+Exec=bash -c 'cd "$(dirname "%k")"; bash ./Install-Projectivy.sh; printf "\nPress Enter to close. "; read -r _ || true'
+Terminal=true
+Icon=video-television
+StartupNotify=true
+Categories=Utility;System;
+Keywords=firetv;firestick;projectivy;amazon;adb;

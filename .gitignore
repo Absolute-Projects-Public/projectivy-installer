@@ -1,0 +1,14 @@
+# runtime output - never commit
+logs/
+*.log
+platform-tools/
+
+# internal working notes, not part of the published project
+PROJECT.md
+
+# editor / OS noise
+.DS_Store
+Thumbs.db
+*.swp
+# build artefacts
+*.zip

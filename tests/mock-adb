@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# Mock `adb` used by tests/run-paths.sh so the wizard can be exercised without a Fire TV.
+# State lives in $MOCK_STATE (default /tmp/mockad-state).
+
+S="${MOCK_STATE:-/tmp/mockad-state}"
+mkdir -p "$S"
+cmd="${1:-}"; shift || true
+
+case "$cmd" in
+  devices)
+    echo "List of devices attached"
+    [ -f "$S/conn" ] && printf '%s\tdevice\n' "$(cat "$S/target" 2>/dev/null)"
+    ;;
+  connect)    printf '%s' "$*" > "$S/target"; touch "$S/conn"; echo "connected to $*" ;;
+  disconnect) rm -f "$S/conn" ;;
+  install)    echo "Performing Streamed Install"; echo "Success"; touch "$S/proj" ;;
+  version)    echo "Android Debug Bridge version 1.0.41" ;;
+  shell)
+    case "$*" in
+      "getprop ro.build.version.name")   echo "Fire OS 8.1.8.2 (RS8182/3811)" ;;
+      "getprop ro.build.version.fireos") echo "8.0" ;;
+      "pm list packages")
+        echo "package:com.amazon.tv.launcher"
+        [ -f "$S/proj" ] && echo "package:com.spocky.projengmenu" ;;
+      "pm grant"*) touch "$S/hofgrant" ;;
+      "settings put secure enabled_accessibility_services "*Projectivy*)
+        echo "com.spocky.projengmenu/com.spocky.projengmenu.services.ProjectivyAccessibilityService" > "$S/a11y" ;;
+      "settings put secure enabled_accessibility_services """) rm -f "$S/a11y" ;;
+      "settings get secure enabled_accessibility_services") cat "$S/a11y" 2>/dev/null ;;
+      "settings put global private_dns_mode "*) echo hostname > "$S/pdns" ;;
+      "settings get global private_dns_mode") [ -f "$S/pdns" ] && cat "$S/pdns" || echo "off" ;;
+      "settings put global private_dns_specifier "*) printf '%s' "${*#settings put global private_dns_specifier }" > "$S/dns" ;;
+      "settings get global private_dns_specifier") cat "$S/dns" 2>/dev/null ;;
+      "settings delete global private_dns_specifier") rm -f "$S/dns" ;;
+      "settings put global private_dns_mode off") rm -f "$S/pdns" ;;
+      "settings put global dns_servers "*) printf '%s' "${*#settings put global dns_servers }" > "$S/dnss" ;;
+      "settings get global dns_servers") cat "$S/dnss" 2>/dev/null ;;
+      "settings delete global dns_servers") rm -f "$S/dnss" ;;
+      "dumpsys window")
+        case "${MOCK_FOCUS:-projectivy}" in
+          plex)   echo "  mCurrentFocus=Window{faccef6 u0 com.plexapp.android/tv.plex.app.MainActivity}" ;;
+          amazon) echo "  mCurrentFocus=Window{1a2b3c u0 com.amazon.tv.launcher/.ui.HomeActivity_vNext}" ;;
+          *)      echo "  mCurrentFocus=Window{2f9a1 u0 com.spocky.projengmenu/com.spocky.projengmenu.MainActivity}" ;;
+        esac ;;
+      # uptime in seconds: a real power cycle resets this. long_uptime simulates "user did not reboot".
+      "cat /proc/uptime")
+        if [ -f "$S/long_uptime" ]; then echo "9000.00 36000.00"; else echo "45.00 100.00"; fi ;;
+      "dumpsys package "*homeonfire*) [ -f "$S/hofgrant" ] && echo "WRITE_SECURE_SETTINGS: granted=true" ;;
+      "dumpsys deviceidle "*) echo "Added: com.spocky.projengmenu" ;;
+      # the DNS check: NextDNS answers blocked names with 0.0.0.0
+      "ping "*) echo "PING softwareupdates.amazon.com (0.0.0.0) 56(84) bytes of data." ;;
+      "appops "*) ;;
+      "am start"*) ;;
+      "input keyevent"*) ;;
+    esac
+    ;;
+esac
+exit 0
