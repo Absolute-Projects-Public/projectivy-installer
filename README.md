@@ -6,6 +6,8 @@
 Replaces the ad-filled Amazon Fire TV home screen with **Projectivy Launcher** on a Fire TV Stick or
 Cube running Fire OS 7 or 8, and optionally stops Amazon pushing the update that would revert it.
 
+![The setup wizard running in a terminal](docs/hero-wizard.png)
+
 Nothing here needs root. Nothing here uses the `hidden_api_blacklist_exemptions` system-user exploit -
 that was patched by Amazon in October 2025 and can boot-loop a device.
 
@@ -96,8 +98,10 @@ screen, no ads, Home button redirected, and the settings survived a full power c
 - `Install-Projectivy.desktop` - double-click launcher for `Install-Projectivy.sh` (needs `chmod +x` on both, see §8).
 - `setup-firestick.ps1` - Windows, non-interactive CLI equivalent.
 - `setup-firestick.sh` - Linux/macOS equivalent.
-- `tests/` - the regression suite. `./tests/run-paths.sh` runs 49 checks against a fake adb, so it needs
+- `tests/` - the regression suite. `./tests/run-paths.sh` runs 54 checks against a fake adb, so it needs
   no Fire TV at all.
+- `docs/` - the two published images and `make-images.py`, which draws both of them from a real captured
+  session.
 
 The two `setup-firestick` scripts are the one-shot versions for repeat jobs. Each will: find or download
 platform-tools, connect over ADB, confirm Projectivy is present (installing it if asked with `-p` /
@@ -533,7 +537,7 @@ choice about whether to intercept the Home key. Both are needed on Fire OS 8.)
 ### Testing without a Fire TV
 
 ```
-./tests/run-paths.sh        # 22 assertions across 5 wizard paths, no adb or device needed
+./tests/run-paths.sh        # 54 assertions across 13 wizard paths, no adb or device needed
 ```
 
 `tests/mock-adb` fakes just enough of ADB (devices, connect, install, the specific `settings`/`getprop`/
