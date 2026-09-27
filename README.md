@@ -592,3 +592,18 @@ work of its own author, Home on Fire of its own; both are downloaded from their 
 install time. Nothing here is affiliated with Amazon, Projectivy or Home on Fire.
 
 Licensed under the MIT licence (see `LICENSE`).
+
+## AI Disclosure
+
+Development here is AI-assisted: an agent (Hermes, by Nous Research, driving models through
+OpenRouter — the model varies by task) does much of the diagnosis, research, implementation,
+documentation and release tooling. The maintainer reviews every change and owns it.
+
+That comes with the rule this project is built on: **a change ships only if it can be verified on
+real hardware.** The wizards are exercised end to end on an actual Fire TV, a cold boot included,
+because the failure modes here (a launcher that will not come up, an update that reverts the whole
+thing) do not show up anywhere else.
+
+Contributions: AI-assisted work is welcome if you understand it and can explain the change, and if
+it comes with evidence — a reproduction, a test, or a reason. We will not accept fully-vibecoded
+contributions, where nobody can account for the code, because the risk of regression is too high.
