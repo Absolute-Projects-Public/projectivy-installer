@@ -560,12 +560,20 @@ install_projectivy_adb() {
   log_event 'INSTALL' 'APK downloaded, running adb install -r'
   "$ADB" install -r "$apk" || warn 'Install reported an error - check the TV screen.'
   rm -f "$apk"
-  if printf '%s' "$(adb_sh pm list packages)" | grep -qF "$PROJ_PKG"; then
-    ok 'Projectivy installed'
-    log_event 'INSTALL' 'package present after install'
-    INSTALL_MODE='adb'
-    return 0
-  fi
+  # No pipe into grep -q: under pipefail, grep exits on the first match and printf gets EPIPE,
+  # which makes the whole pipeline look like a failure. It only bites sometimes, which is worse.
+  local pkgs; pkgs=$(adb_sh pm list packages)
+  case "
+$pkgs
+" in
+    *"
+package:$PROJ_PKG
+"*)
+      ok 'Projectivy installed'
+      log_event 'INSTALL' 'package present after install'
+      INSTALL_MODE='adb'
+      return 0 ;;
+  esac
   bad 'It did not install. Check the TV for a blocked-install prompt.'
   log_event 'INSTALL' 'package NOT present after install'
   return 1
@@ -574,11 +582,19 @@ install_projectivy_adb() {
 install_projectivy_manual() {
   downloader_codes
   pause 'Press Enter once Projectivy is installed on the TV...'
-  if printf '%s' "$(adb_sh pm list packages)" | grep -qF "$PROJ_PKG"; then
+  # No pipe into grep -q: under pipefail, grep exits on the first match and printf gets EPIPE,
+  # which makes the whole pipeline look like a failure. It only bites sometimes, which is worse.
+  local pkgs; pkgs=$(adb_sh pm list packages)
+  case "
+$pkgs
+" in
+    *"
+package:$PROJ_PKG
+"*)
     ok 'Projectivy found'
     INSTALL_MODE='existing'
-    return 0
-  fi
+    return 0 ;;
+  esac
   bad 'Still not seeing Projectivy on the stick.'
   return 1
 }
@@ -757,11 +773,11 @@ button instead of overriding the launcher, and works where the override does not
   fi
   "$ADB" install -r /tmp/home-on-fire.apk || warn 'Install reported an error - check the TV screen.'
   adb_do pm grant "$HOF_PKG" android.permission.WRITE_SECURE_SETTINGS
-  if adb_sh dumpsys package "$HOF_PKG" | grep -q 'WRITE_SECURE_SETTINGS: granted=true'; then
-    ok 'WRITE_SECURE_SETTINGS granted'
-  else
-    warn 'permission grant not confirmed - the accessibility switch in the app may refuse'
-  fi
+  local hof; hof=$(adb_sh dumpsys package "$HOF_PKG")
+  case "$hof" in
+    *'WRITE_SECURE_SETTINGS: granted=true'*) ok 'WRITE_SECURE_SETTINGS granted' ;;
+    *) warn 'permission grant not confirmed - the accessibility switch in the app may refuse' ;;
+  esac
   adb_do am start -n "$HOF_PKG/.MainActivity"
   log_event 'HOF' 'home on fire installed, permission granted, app opened on the TV'
 

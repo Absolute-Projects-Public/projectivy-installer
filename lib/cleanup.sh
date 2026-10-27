@@ -76,11 +76,25 @@ ask_yn() {  # ask_yn <prompt> <default 0|1> ; 0 = yes
 }
 
 present_pkg() {  # present_pkg <package> -> 0 when installed
-  adb_sh pm list packages 2>/dev/null | tr -d '\r' | grep -qx "package:$1"
+  # Match a whole line with a case statement instead of piping into grep -q: under pipefail,
+  # grep exiting early gives the writer EPIPE and the pipeline reports failure - intermittently.
+  local list; list=$(adb_sh pm list packages 2>/dev/null)
+  case "
+$list
+" in *"
+package:$1
+"*) return 0 ;; esac
+  return 1
 }
 
 pkg_disabled() {
-  adb_sh pm list packages -d 2>/dev/null | tr -d '\r' | grep -qx "package:$1"
+  local list; list=$(adb_sh pm list packages -d 2>/dev/null)
+  case "
+$list
+" in *"
+package:$1
+"*) return 0 ;; esac
+  return 1
 }
 
 pkg_version() {
@@ -282,7 +296,8 @@ disable_pkg() {  # -> echoes one of: disabled protected system suspect
     *"new state: disabled"*)                       printf 'disabled\n' ;;
     *"Cannot disable a protected package"*|*SecurityException*) printf 'protected\n' ;;
     *"Shell cannot change component state"*)
-      if adb_sh dumpsys package "$p" | grep -q 'enabled=2'; then printf 'system\n'; else printf 'suspect\n'; fi ;;
+      local dp; dp=$(adb_sh dumpsys package "$p")
+      case "$dp" in *'enabled=2'*) printf 'system\n' ;; *) printf 'suspect\n' ;; esac ;;
     *)                                             printf 'suspect\n' ;;
   esac
 }
@@ -324,30 +339,36 @@ $(data_list alexa.txt)"
 
   # Apps you named: a system app is disabled (restorable), a store app is uninstalled and comes
   # back from the Appstore. Either way it is in the undo log.
-  local rem
+  local rem syspkgs p
   rem="$(resolve_apps "$WIZ_REMOVE")"
   if [ -n "$rem" ]; then
     printf '\n  apps you asked to remove:\n'
+    syspkgs=$(adb_sh pm list packages -s 2>/dev/null)
     for p in $rem; do
       case "$never" in *" $p "*) printf '  %-44s keeps the TV working - not touched\n' "$p"; continue ;; esac
       if ! present_pkg "$p"; then printf '  %-44s not on this TV\n' "$p"; continue; fi
-      if adb_sh pm list packages -s 2>/dev/null | tr -d '\r' | grep -qx "package:$p"; then
-        state=$(disable_pkg "$p")
-        if [ "$state" = disabled ]; then
-          printf '  %-44s disabled (system app, restorable)\n' "$p"
-          printf 'pkg\t%s\tdisabled\n' "$p" >> "$UNDO_LOG"
-        else
-          printf '  %-44s cannot be changed on this build\n' "$p"
-        fi
-      else
-        adb_do pm uninstall --user 0 "$p" >/dev/null
-        if present_pkg "$p"; then
-          printf '  %-44s could not be removed\n' "$p"
-        else
-          printf '  %-44s removed (Appstore reinstalls it)\n' "$p"
-          printf 'pkg\t%s\tuninstalled\n' "$p" >> "$UNDO_LOG"
-        fi
-      fi
+      case "
+$syspkgs
+" in
+        *"
+package:$p
+"*)
+          state=$(disable_pkg "$p")
+          if [ "$state" = disabled ]; then
+            printf '  %-44s disabled (system app, restorable)\n' "$p"
+            printf 'pkg\t%s\tdisabled\n' "$p" >> "$UNDO_LOG"
+          else
+            printf '  %-44s cannot be changed on this build\n' "$p"
+          fi ;;
+        *)
+          adb_do pm uninstall --user 0 "$p" >/dev/null
+          if present_pkg "$p"; then
+            printf '  %-44s could not be removed\n' "$p"
+          else
+            printf '  %-44s removed (Appstore reinstalls it)\n' "$p"
+            printf 'pkg\t%s\tuninstalled\n' "$p" >> "$UNDO_LOG"
+          fi ;;
+      esac
     done
   fi
 
@@ -702,7 +723,9 @@ switched off, so the list has to be pointed at once on the TV:
   5. Accept the VPN prompt if it appears.
 
 If that is more than you want to do, the NextDNS option blocks Amazon's update servers with no
-app at all - it is the safer choice on Fire OS 8."
+app at all - it is the safer choice on Fire OS 8. For a fully automated filter on this build, the
+dumbtv project's own script is the reference implementation: github.com/humblemuzzu/dumbtv
+(scripts/dnsfilter.sh)."
     pause 'Press Enter once that is done (or just to carry on)...'
   fi
   dim 'Verification happens on the next screen.'

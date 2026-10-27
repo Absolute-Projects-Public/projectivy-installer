@@ -154,6 +154,11 @@ is refused before it starts. The wizard installs the filter and puts the list wh
 then tells you the exact path to pick in the app: Advanced settings > Configure filter update > pencil >
 `file:///sdcard/Android/media/dnsfilter.android/blocklist.txt`. That is five taps with the remote.
 
+**For a fully automated filter on Fire OS 8, use dumbtv's own script**
+(`github.com/humblemuzzu/dumbtv`, `scripts/dnsfilter.sh`) - it is the reference implementation and the
+source of the approach here. It hits the same wall on this build, which is why their device table marks
+the 4K Max as "partial".
+
 **If you would rather not touch the TV at all, choose NextDNS instead.** It blocks Amazon's update
 servers with no app and no taps, at the cost of a free account. On Fire OS 8 that is the option we
 recommend.

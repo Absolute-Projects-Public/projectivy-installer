@@ -721,7 +721,8 @@ function Install-DnsFilter {
         Log '  4. Untick the other entries, then go back so it reloads.'
         Log '  5. Accept the VPN prompt if it appears.'
         Log 'If that is more than you want to do, the NextDNS option blocks Amazon update servers with'
-        Log 'no app at all - it is the safer choice on Fire OS 8.'
+        Log 'no app at all - it is the safer choice on Fire OS 8. For a fully automated filter on this'
+        Log 'build, dumbtv own script is the reference: github.com/humblemuzzu/dumbtv'
         [void](Read-Reply 'Press Enter once that is done (or just to carry on)')
     }
     Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinue
