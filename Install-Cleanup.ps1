@@ -694,12 +694,17 @@ function Install-DnsFilter {
 
     if ($placed -ne 'app') {
         Log ''
-        Log 'One tap is needed on the TV (Fire OS 8 hides the app folder from this computer):'
-        Log "  1. Open personalDNSfilter from the apps row."
-        Log '  2. Choose to import/select a blocklist, then pick:'
+        Log 'This build will not let a computer write into the app own folder, and its backup service'
+        Log 'is switched off, so the list has to be pointed at once on the TV:'
+        Log '  1. Open personalDNSfilter from the apps row.'
+        Log '  2. Advanced settings > Configure filter update.'
+        Log '  3. Tap the pencil on the first entry and replace the URL with:'
         Dim2 "file://$mediaDir/blocklist.txt"
-        Log "  3. Accept the VPN prompt, then come back here."
-        [void](Read-Reply 'Press Enter once that is done')
+        Log '  4. Untick the other entries, then go back so it reloads.'
+        Log '  5. Accept the VPN prompt if it appears.'
+        Log 'If that is more than you want to do, the NextDNS option blocks Amazon update servers with'
+        Log 'no app at all - it is the safer choice on Fire OS 8.'
+        [void](Read-Reply 'Press Enter once that is done (or just to carry on)')
     }
     Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinue
 }

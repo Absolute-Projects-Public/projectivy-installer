@@ -41,9 +41,24 @@ SMARTTUBE_SHA256="${SMARTTUBE_SHA256:-4a35b90940612e048e4e9cb9e10379f7db1e84f303
 SMARTTUBE_VERSION_CODE=2446
 YT_PKG='com.amazon.firetv.youtube'
 
+DNSF_CONF_URL='https://raw.githubusercontent.com/IngoZenz/personaldnsfilter/master/app/src/main/assets/dnsfilter.conf'
 HAGEZI_URL='https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/native.amazon-onlydomains.txt'
 
 # ---- small helpers --------------------------------------------------------
+# appdata_archive / restore_app_data: the only way into an app's folder on Android 11+
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/appdata.sh"
+
+# Fire OS 8 (and some other Android 11 builds) ship with the backup service switched off, so an
+# adb restore is refused before it can even ask for confirmation. Cheaper to ask first.
+backup_available() {
+  local out; out=$(adb_sh bmgr enabled 2>/dev/null)
+  case "$out" in
+    *"not activated"*|*"not available"*|*"not enabled"*|*"Unknown command"*|*"unknown command"*) return 1 ;;
+  esac
+  return 0
+}
+
+dnsf_signer() { sed 's/#.*//' "$DATA_DIR/personaldnsfilter-signer.txt" | awk 'NF {print; exit}'; }
 
 data_list() {  # data_list <file-in-data/>  -> first field of every non-comment line
   local f="$DATA_DIR/$1"
@@ -581,39 +596,92 @@ stops being able to reach Amazon's telemetry and update servers, and everything 
   fi
   ok "$n hosts in the list"
 
-  # Preferred: the app's own folder (works on Fire OS 7). Fire OS 8 hides it from adb, so fall
-  # back to Android/media, which adb can still write, and the app is pointed at the file once.
-  mkdir -p "$tmp/push"
-  cp "$tmp/blocklist.txt" "$tmp/push/blocklist.txt"
-  printf '<dnsfilter><blocklist>file:///sdcard/Android/media/%s/blocklist.txt</blocklist></dnsfilter>\n' "$DNSF_PKG" > "$tmp/push/dnsfilter.conf"
+  # Fire OS 7 lets adb write the app's folder. Fire OS 8 (Android 11) does not, so the files go in
+  # with an `adb restore` archive instead; Android unpacks them as the app after one confirmation.
   local appdir="/sdcard/Android/data/$DNSF_PKG/files/PersonalDNSFilter"
   local mediadir="/sdcard/Android/media/$DNSF_PKG"
-  adb_do mkdir -p "$mediadir"
-  if "$ADB" push "$tmp/blocklist.txt" "$mediadir/blocklist.txt" 2>&1 </dev/null | grep -qi 'error\|failed'; then
-    warn 'Could not copy the blocklist to the TV - DNS left as it was.'
-    rm -rf "$tmp"; NEXT='clean_verify'; return
+  local placed='none'
+  local gw; gw=$(adb_sh ip route | sed -n 's/.*via \([0-9][0-9.]*\).*/\1/p' | head -1)
+  log_event 'CLEAN' "dns filter: gateway ${gw:-unknown}, sdk $SDK_INT"
+
+  if [ "${SDK_INT:-0}" -ge 30 ] && backup_available; then
+    # Build the app's own config from the upstream template, with downloads switched off.
+    if curl -fsSL --retry 2 --max-time 60 -o "$tmp/dnsfilter.conf" "$DNSF_CONF_URL" 2>/dev/null; then
+      sed -i \
+        -e 's|^filterAutoUpdateURL = |#filterAutoUpdateURL = |' \
+        -e 's|^previousAutoUpdateURL = .*|previousAutoUpdateURL = |' \
+        -e 's|^detectDNS = .*|detectDNS = false|' \
+        -e 's|^routeIPs =.*|routeIPs = '"${gw:-}"'|' \
+        -e 's|^routeUnderlyingDNS = .*|routeUnderlyingDNS = true|' \
+        -e 's|^showInitialInfoPopUp = .*|showInitialInfoPopUp = false|' \
+        -e 's|^reloadIntervalDays = .*|reloadIntervalDays = 3650|' \
+        -e 's|^filterHostsFile = .*|filterHostsFile = FILTERHOSTS.TXT|' \
+        -e 's|^androidAppWhiteList = .*|androidAppWhiteList = <none>|' \
+        "$tmp/dnsfilter.conf"
+      if grep -q '^filterHostsFile = FILTERHOSTS.TXT' "$tmp/dnsfilter.conf"; then
+        local data="$tmp/appdata/PersonalDNSFilter"
+        mkdir -p "$data"
+        cp "$tmp/dnsfilter.conf" "$data/dnsfilter.conf"
+        cp "$tmp/blocklist.txt"  "$data/FILTERHOSTS.TXT"
+        printf '%s\n%s\n' "$n" "$(date +%s)000" > "$data/FILTERHOSTS.TXT.DLD_CNT"
+        : > "$data/IDX_OUTDATED"
+        printf '%s' "$DNSF_VERSION" > "$data/VERSION.TXT"
+        if appdata_archive "$tmp/appdata.ab" "$DNSF_PKG" "$DNSF_VERSION" "$SDK_INT" "$(dnsf_signer)" "$data" PersonalDNSFilter; then
+          adb_do am force-stop "$DNSF_PKG"
+          sleep 2
+          if restore_app_data "$tmp/appdata.ab"; then
+            placed='restore'
+            ok 'Config and blocklist written into the app (no taps needed)'
+          else
+            warn 'The restore did not complete - falling back to the file-based route.'
+          fi
+        fi
+      else
+        warn 'The filter config template changed upstream - using the file-based route.'
+      fi
+    else
+      dim 'Could not fetch the filter config template - using the file-based route.'
+    fi
+  else
+    # Android 9 and 10: the app folder is still writable by adb.
+    mkdir -p "$tmp/push"
+    cp "$tmp/blocklist.txt" "$tmp/push/FILTERHOSTS.TXT"
+    if "$ADB" push "$tmp/push/FILTERHOSTS.TXT" "$appdir/FILTERHOSTS.TXT" >/dev/null 2>&1 </dev/null; then
+      placed='app'
+    fi
   fi
-  local placed='media'
-  if "$ADB" push "$tmp/push/blocklist.txt" "$appdir/blocklist.txt" >/dev/null 2>&1 </dev/null; then
-    "$ADB" push "$tmp/push/dnsfilter.conf" "$appdir/dnsfilter.conf" >/dev/null 2>&1 </dev/null && placed='app'
+
+  if [ "$placed" = 'none' ] || [ "$placed" = 'app' ]; then
+    # Always leave the list somewhere adb can write, so the manual route is possible.
+    adb_do mkdir -p "$mediadir"
+    cp "$tmp/blocklist.txt" "$tmp/blocklist-media.txt"
+    if "$ADB" push "$tmp/blocklist-media.txt" "$mediadir/blocklist.txt" >/dev/null 2>&1 </dev/null; then
+      [ "$placed" = 'none' ] && placed='media'
+    fi
   fi
-  log_event 'CLEAN' "dns filter blocklist placed in $placed dir ($n hosts)"
+  log_event 'CLEAN' "dns filter config placed via $placed ($n hosts)"
 
   adb_do settings put secure always_on_vpn_app "$DNSF_PKG"
   adb_do am start -n "$DNSF_PKG/.DNSProxyActivity"
   ok 'Filter configured to start with the TV'
 
-  if [ "$placed" != app ]; then
+  if [ "$placed" = 'media' ]; then
     body "
-One tap is needed on the TV (Fire OS 8 hides the app folder from this computer):
+This build will not let a computer write into the app's own folder, and its backup service is
+switched off, so the list has to be pointed at once on the TV:
 
   1. Open personalDNSfilter from the apps row.
-  2. Choose to import/select a blocklist, then pick:
+  2. Advanced settings > Configure filter update.
+  3. Tap the pencil on the first entry and replace the URL with:
      file:///sdcard/Android/media/$DNSF_PKG/blocklist.txt
-  3. Accept the VPN prompt ('OK'), then come back here."
-    pause 'Press Enter once that is done...'
+  4. Untick the other entries, then go back so it reloads.
+  5. Accept the VPN prompt if it appears.
+
+If that is more than you want to do, the NextDNS option blocks Amazon's update servers with no
+app at all - it is the safer choice on Fire OS 8."
+    pause 'Press Enter once that is done (or just to carry on)...'
   fi
-  dim "Verification happens after the reboot, on the next screen."
+  dim 'Verification happens on the next screen.'
   rm -rf "$tmp"
   NEXT='clean_verify'
 }

@@ -128,18 +128,37 @@ switching, the remote, WebView, the Appstore) and nothing will touch them.
 
 ### Proven on a real stick
 
-Run end to end against a Fire TV Stick 4K Max (2nd gen) on Fire OS 8.1.8.5: 32 packages disabled, 6
-starved, all 13 ad and animation settings written, and the home screen handed over with
-`cmd package set-home-activity` and confirmed by reading the focused window - **no manual toggle needed on
-that build**. Plex, the Appstore, Settings and the launcher all still open afterwards, and Undo put it
-back.
+Run end to end against a Fire TV Stick 4K Max (2nd gen) on Fire OS 8.1.8.5:
+
+- 32 packages disabled, 6 starved, all 13 ad and animation settings written (the settings loop needed a
+  fix that only the real device exposed - ADB was eating its own input, so just one of the thirteen had
+  been applied).
+- the home screen handed over with `cmd package set-home-activity` and confirmed by reading the focused
+  window - **no manual toggle needed on that build**.
+- SmartTube installed (versionCode 2446) and the stock YouTube app disabled, both verified.
+- Plex, the Appstore, Settings and the launcher all still open afterwards.
+- the on-device DNS filter is the one part that cannot be finished remotely on Fire OS 8; see below.
 
 ### The on-device DNS filter
 
-A small open-source filter runs on the TV and blocks about 400 Amazon telemetry, advertising and update
-hosts. No account, no router changes, and your streaming apps keep working. On Fire OS 8 the app's own
-folder is hidden from ADB, so the list is placed in `Android/media` and you get one prompt on the TV to
-point the app at it - the wizard tells you exactly which file to pick.
+A small open-source filter runs on the TV and blocks about 380 Amazon telemetry, advertising and update
+hosts. No account, no router changes, and your streaming apps keep working.
+
+**On Fire OS 8 this step cannot be finished from the computer, and the tool says so.** Android 11 hides
+the app's own folder from ADB, and Fire OS 8 also ships with its backup service switched off
+(`bmgr enabled` answers "Backup Manager is not activated"), so the restore route that works on Fire OS 7
+is refused before it starts. The wizard installs the filter and puts the list where the TV can read it,
+then tells you the exact path to pick in the app: Advanced settings > Configure filter update > pencil >
+`file:///sdcard/Android/media/dnsfilter.android/blocklist.txt`. That is five taps with the remote.
+
+**If you would rather not touch the TV at all, choose NextDNS instead.** It blocks Amazon's update
+servers with no app and no taps, at the cost of a free account. On Fire OS 8 that is the option we
+recommend.
+
+Measured on a 4K Max (2nd gen, Fire OS 8.1.8.5): the filter installed and ran, and it blocked
+`device-metrics-us.amazon.com` and `arcus.amazon.com` from its own default lists, but it did not block
+`softwareupdates.amazon.com` until our list is pointed at it. That is why the update-blocking claim on
+this build depends on the NextDNS route or on finishing those taps.
 
 ## What's in this folder
 

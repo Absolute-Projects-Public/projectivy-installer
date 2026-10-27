@@ -309,7 +309,7 @@ echo "Path P: Fire OS 8 hides the app directory, so the media fallback is used"
 SEED_EMPTY=0; export MOCK_APP_DIR=hidden
 run_path "1\n\n1\n192.168.1.100\ny\ny\n1\n1\nn\n\n1\n\n1\n"
 echo "Path P: media fallback"
-check "explains the one tap needed on the TV"   "$(contains "$OUT" 'One tap is needed on the TV'; echo $?)"
+check "explains the manual step on the TV"      "$(contains "$OUT" 'pointed at once on the TV'; echo $?)"
 check "names the file to point the app at"      "$(contains "$OUT" 'Android/media/dnsfilter.android/blocklist.txt'; echo $?)"
 check "still finishes"                          "$(contains "$OUT" 'Cleanup finished'; echo $?)"
 unset MOCK_APP_DIR
