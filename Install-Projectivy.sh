@@ -218,14 +218,16 @@ choose() {
 adb_sh() {
   log_event 'ADB-REQ' "shell $*"
   local out
-  out="$("$ADB" shell "$@" 2>&1 | tr -d '\r' || true)"
+  # </dev/null matters: adb would otherwise eat the stdin of a `while read` loop that calls us,
+  # which silently stopped after the first iteration.
+  out="$("$ADB" shell "$@" 2>&1 </dev/null | tr -d '\r' || true)"
   log_event 'ADB-OUT' "$(printf '%s' "$out" | head -c 600)"
   printf '%s' "$out"
 }
 
 adb_do() {
   log_event 'ADB-REQ' "shell $*"
-  "$ADB" shell "$@" >/dev/null 2>&1 || true
+  "$ADB" shell "$@" </dev/null >/dev/null 2>&1 || true
 }
 
 # ---------------------------------------------------------------- adb

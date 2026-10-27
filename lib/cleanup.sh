@@ -417,7 +417,7 @@ clean_launcher() {
       else
         local tmp; tmp="$(mktemp -d)"
         if fetch_verify "$DUMBTV_URL" "$DUMBTV_SHA256" "$tmp/$DUMBTV_PKG.apk"; then
-          local out; out=$("$ADB" install -r "$tmp/$DUMBTV_PKG.apk" 2>&1 | tail -1)
+          local out; out=$("$ADB" install -r "$tmp/$DUMBTV_PKG.apk" 2>&1 </dev/null | tail -1)
           present_pkg "$DUMBTV_PKG" || { warn "dumbtv home did not install: $out"; NEXT='clean_smarttube'; rm -rf "$tmp"; return; }
           ok 'dumbtv home installed (checksum verified)'
         else
@@ -455,7 +455,7 @@ brings it straight back."
   fi
   code=0
   for attempt in 1 2; do
-    out=$("$ADB" install -r "$tmp/$SMARTTUBE_PKG.apk" 2>&1 | tail -1)
+    out=$("$ADB" install -r "$tmp/$SMARTTUBE_PKG.apk" 2>&1 </dev/null | tail -1)
     sleep 1
     code=$(pkg_version "$SMARTTUBE_PKG"); code="${code:-0}"
     [ "$code" -ge "$SMARTTUBE_VERSION_CODE" ] && break
@@ -561,7 +561,7 @@ stops being able to reach Amazon's telemetry and update servers, and everything 
       warn 'Could not download the filter - DNS left as it was.'
       rm -rf "$tmp"; NEXT='clean_verify'; return
     fi
-    local out; out=$("$ADB" install -r "$tmp/$DNSF_PKG.apk" 2>&1 | tail -1)
+    local out; out=$("$ADB" install -r "$tmp/$DNSF_PKG.apk" 2>&1 </dev/null | tail -1)
     have=$(pkg_version "$DNSF_PKG")
     if [ "$have" != "$DNSF_VERSION" ]; then
       warn "The filter did not install: $out"
@@ -589,13 +589,13 @@ stops being able to reach Amazon's telemetry and update servers, and everything 
   local appdir="/sdcard/Android/data/$DNSF_PKG/files/PersonalDNSFilter"
   local mediadir="/sdcard/Android/media/$DNSF_PKG"
   adb_do mkdir -p "$mediadir"
-  if "$ADB" push "$tmp/blocklist.txt" "$mediadir/blocklist.txt" 2>&1 | grep -qi 'error\|failed'; then
+  if "$ADB" push "$tmp/blocklist.txt" "$mediadir/blocklist.txt" 2>&1 </dev/null | grep -qi 'error\|failed'; then
     warn 'Could not copy the blocklist to the TV - DNS left as it was.'
     rm -rf "$tmp"; NEXT='clean_verify'; return
   fi
   local placed='media'
-  if "$ADB" push "$tmp/push/blocklist.txt" "$appdir/blocklist.txt" >/dev/null 2>&1; then
-    "$ADB" push "$tmp/push/dnsfilter.conf" "$appdir/dnsfilter.conf" >/dev/null 2>&1 && placed='app'
+  if "$ADB" push "$tmp/push/blocklist.txt" "$appdir/blocklist.txt" >/dev/null 2>&1 </dev/null; then
+    "$ADB" push "$tmp/push/dnsfilter.conf" "$appdir/dnsfilter.conf" >/dev/null 2>&1 </dev/null && placed='app'
   fi
   log_event 'CLEAN' "dns filter blocklist placed in $placed dir ($n hosts)"
 

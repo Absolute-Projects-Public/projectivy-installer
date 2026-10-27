@@ -101,13 +101,17 @@ case "$cmd" in
         [ -f "$S/disabled" ] && grep -vx "$p" "$S/disabled" > "$S/disabled.tmp" 2>/dev/null; mv "$S/disabled.tmp" "$S/disabled" 2>/dev/null
         echo "Package $p new state: enabled"
         ;;
-      "pm uninstall --user 0 "*) p="${@: -1}"; rm -f "$S/pkg_$p"; echo "Success" ;;
+      "pm uninstall --user 0 "*) p="${@: -1}"; rm -f "$S/pkg_$p"
+        [ -f "$S/pkgs" ] && grep -vx "$p" "$S/pkgs" > "$S/pkgs.tmp" 2>/dev/null; mv "$S/pkgs.tmp" "$S/pkgs" 2>/dev/null
+        echo "Success" ;;
       "pm uninstall "*)          p="${@: -1}"; rm -f "$S/pkg_$p"; echo "Success" ;;
       "pm grant"*)               touch "$S/hofgrant" ;;
       "cmd package set-home-activity "*)
         comp="${@: -1}"; echo "${comp%%/*}" > "$S/front"; echo "Success"
         ;;
-      "cmd package install-existing "*) p="${@: -1}"; touch "$S/pkg_$p"; echo "Package $p installed for user: 0" ;;
+      "cmd package install-existing "*) p="${@: -1}"; touch "$S/pkg_$p"
+        grep -qx "$p" "$S/pkgs" 2>/dev/null || echo "$p" >> "$S/pkgs"
+        echo "Package $p installed for user: 0" ;;
       "cmd netpolicy add restrict-background-blacklist "*) echo "${@: -1}" >> "$S/netpolicy" ;;
       "cmd netpolicy remove restrict-background-blacklist "*)
         u="${@: -1}"; [ -f "$S/netpolicy" ] && grep -vx "$u" "$S/netpolicy" > "$S/netpolicy.tmp"; mv "$S/netpolicy.tmp" "$S/netpolicy" 2>/dev/null ;;

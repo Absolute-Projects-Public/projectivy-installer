@@ -13,8 +13,8 @@ Takes the ads, the tracking and the clutter out of an Amazon Fire TV Stick or Cu
 
 Every change is written to an undo log, and **Undo everything** in the menu reverses it.
 
-Right now the full cleanup lives in the **Linux and macOS** wizard. The Windows `.cmd` wizard still does
-the home screen only - the cleanup is being ported to PowerShell next.
+On Windows, double-click **`Cleanup-FireTV.cmd`** for the full cleanup, or `Install-Projectivy.cmd` for
+the home screen only. On Linux and macOS it is one wizard with both modes in the first menu.
 
 ![The setup wizard running in a terminal](docs/hero-wizard.png)
 
@@ -28,7 +28,8 @@ that was patched by Amazon in October 2025 and can boot-loop a device.
 1. Download **[the latest release](https://github.com/Absolute-Projects-Public/projectivy-installer/releases/latest)**
    (the `.zip` asset), or click the green **Code** button above and choose **Download ZIP**.
 2. Unzip it somewhere simple, like your Desktop.
-3. Double-click `Install-Projectivy.cmd`.
+3. Double-click **`Cleanup-FireTV.cmd`** for the full cleanup, or `Install-Projectivy.cmd` for the home
+   screen only.
 4. Follow the prompts. It tells you what to do on the TV at each step, and it can put Projectivy on the
    stick over your network, so you never have to type anything with the remote.
 
@@ -125,6 +126,14 @@ The lists live in `data/` as plain text, so you can read exactly what will happe
 `data/never-disable.txt` list is the things that keep the TV working (the launcher itself, settings, HDMI
 switching, the remote, WebView, the Appstore) and nothing will touch them.
 
+### Proven on a real stick
+
+Run end to end against a Fire TV Stick 4K Max (2nd gen) on Fire OS 8.1.8.5: 32 packages disabled, 6
+starved, all 13 ad and animation settings written, and the home screen handed over with
+`cmd package set-home-activity` and confirmed by reading the focused window - **no manual toggle needed on
+that build**. Plex, the Appstore, Settings and the launcher all still open afterwards, and Undo put it
+back.
+
 ### The on-device DNS filter
 
 A small open-source filter runs on the TV and blocks about 400 Amazon telemetry, advertising and update
@@ -140,7 +149,7 @@ point the app at it - the wizard tells you exactly which file to pick.
 - `Install-Projectivy.desktop` - double-click launcher for `Install-Projectivy.sh` (needs `chmod +x` on both, see section 8).
 - `setup-firestick.ps1` - Windows, non-interactive CLI equivalent.
 - `setup-firestick.sh` - Linux/macOS equivalent.
-- `tests/` - the regression suite. `./tests/run-paths.sh` runs 85 checks against a fake adb, so it needs
+- `tests/` - the regression suite. `./tests/run-paths.sh` runs 86 checks against a fake adb, so it needs
   no Fire TV at all.
 - `data/` - the package, setting and host lists the cleanup reads, as plain text.
 - `lib/cleanup.sh` - the cleanup engine: questions, snapshot, debloat, DNS filter, verify, undo.
@@ -581,7 +590,13 @@ choice about whether to intercept the Home key. Both are needed on Fire OS 8.)
 ### Testing without a Fire TV
 
 ```
-./tests/run-paths.sh        # 85 assertions across 17 wizard paths, no adb or device needed
+./tests/run-paths.sh        # 86 assertions across 17 wizard paths, no adb or device needed
+```
+
+The Windows script has its own suite, which runs anywhere PowerShell 7 is installed:
+
+```
+./tests/test-cleanup-ps.sh     # 20 assertions against the same fake adb
 ```
 
 `tests/mock-adb` fakes just enough of ADB (devices, connect, install, the specific `settings`/`getprop`/
