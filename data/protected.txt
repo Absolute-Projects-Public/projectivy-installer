@@ -1,0 +1,13 @@
+# Packages Amazon protects: `pm disable-user` answers "Cannot disable a protected package".
+# There is no way to disable them without root, so instead they lose background execution and
+# background data. The list differs between Fire OS builds.
+# Derived from the dumbtv project (github.com/humblemuzzu/dumbtv, MIT), with thanks.
+# Package ids are facts observed on Fire OS 7/8; the grouping and wording here are ours.
+
+com.amazon.device.metrics
+com.amazon.device.crashmanager
+com.amazon.device.rdmapplication
+com.amazon.ftvads.deeplinking
+com.amazon.tv.csapp
+com.amazon.device.software.ota
+com.amazon.device.software.ota.override

@@ -1,0 +1,18 @@
+# namespace key value   (applied with `settings put`, and recorded so Undo can put the old
+# value back). Amazon-specific keys: on non-Fire devices they simply do nothing.
+# Derived from the dumbtv project (github.com/humblemuzzu/dumbtv, MIT), with thanks.
+# Package ids are facts observed on Fire OS 7/8; the grouping and wording here are ours.
+
+secure amz_limit_ad_tracking 1
+secure limit_ad_tracking 1
+secure non_amz_limit_ad_tracking 1
+secure advertisingIdApp:interestBasedAds:value 0
+secure USAGE_METRICS_UPLOAD_ENABLED 0
+secure usage_metrics_marketing_enabled 0
+secure settingsApp:appUsageData:value 0
+secure settingsApp:deviceUsageData:value 0
+global heads_up_notifications_enabled 0
+global com.amazon.tv.settings.featured_item_video_enabled 0
+global com.amazon.tv.settings.featured_item_video_volume 0.0
+global window_animation_scale 0.5
+global transition_animation_scale 0.5

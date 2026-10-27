@@ -1,0 +1,44 @@
+# Hosts our on-device DNS filter blocks on top of the HaGeZi Amazon tracker feed.
+# One domain per line; every subdomain of a listed domain is covered.
+# Derived from the dumbtv project (github.com/humblemuzzu/dumbtv, MIT), with thanks.
+# Package ids are facts observed on Fire OS 7/8; the grouping and wording here are ours.
+#
+# Deliberately NOT blocked, because the TV needs them: the launcher's content and artwork
+# (atv-ext, ktpx, a4k, m.media-amazon, ecx.images-amazon), the Appstore (mas-ext, mas-sdk),
+# and YouTube. Prime Video's own servers stay reachable when you answer "yes" to Prime Video.
+softwareupdates.amazon.com
+updates.amazon.com
+prod.ota-cloudfront.net
+d1s31zyz7dcc2d.cloudfront.net
+d1s31zyz7dcc2d.cloudfront.prod.ota-cloudfront.net
+amzdigital-a.akamaihd.net
+amzdigitaldownloads.edgesuite.net
+dubri19p4y5b.cloudfront.net
+distro-download.amazon.com
+device-messaging-na.amazon.com
+arcus-uswest.amazon.com
+arcus.amazon.com
+device-metrics-us.amazon.com
+device-metrics-us-2.amazon.com
+device-metrics-us-ud.amazon.com
+det-ta-g7g.amazon.com
+det-ta-g7g.integ.amazon.com
+unagi-zaz.amazon.com
+unagi-na.amazon.com
+metrics.media-amazon.com
+aan.amazon.com
+fls-na.amazon.com
+todo-ta-g7g.amazon.com
+pindorama.amazon.com
+latinum.amazon.com
+dcape-na.amazon.com
+ceviche.amazon.com
+minerva.amazon.com
+aax.amazon-adsystem.com
+aax-us.amazon-adsystem.com
+aax-us-east.amazon-adsystem.com
+aax-us-west.amazon-adsystem.com
+aax-eu.amazon-adsystem.com
+aax-fe.amazon-adsystem.com
+amazon-adsystem.com
+mads.amazon.com

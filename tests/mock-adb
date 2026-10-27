@@ -1,57 +1,198 @@
 #!/usr/bin/env bash
 # Mock `adb` used by tests/run-paths.sh so the wizard can be exercised without a Fire TV.
 # State lives in $MOCK_STATE (default /tmp/mockad-state).
+#
+# Knobs, all optional:
+#   MOCK_FOCUS=projectivy|plex|amazon   what dumpsys window reports when nothing has switched home
+#   MOCK_PORT=0|1                       is port 5555 answering
+#   MOCK_DNS=blocked|open               do Amazon hosts answer 0.0.0.0 (filter up) or a real address
+#   MOCK_PROTECTED="pkg pkg"            packages that answer "Cannot disable a protected package"
+#   MOCK_SYSTEM_OFF="pkg pkg"           packages the shell cannot move (already disabled by the system)
 
 S="${MOCK_STATE:-/tmp/mockad-state}"
 mkdir -p "$S"
 cmd="${1:-}"; shift || true
+
+installed() { [ -f "$S/pkg_$1" ] || [ -f "$S/proj" ] && case "$1" in com.spocky.projengmenu) return 0 ;; esac; [ -f "$S/pkg_$1" ]; }
 
 case "$cmd" in
   devices)
     echo "List of devices attached"
     [ -f "$S/conn" ] && printf '%s\tdevice\n' "$(cat "$S/target" 2>/dev/null)"
     ;;
-  connect)    printf '%s' "$*" > "$S/target"; touch "$S/conn"; echo "connected to $*" ;;
+  connect)
+    printf '%s' "${1:-}" > "$S/target"; touch "$S/conn"; echo "connected to ${1:-}"
+    ;;
   disconnect) rm -f "$S/conn" ;;
-  install)    echo "Performing Streamed Install"; echo "Success"; touch "$S/proj" ;;
-  version)    echo "Android Debug Bridge version 1.0.41" ;;
+  install)
+    # install [-r] <apk>: decide the package from the file name
+    apk="${!#}"
+    case "$apk" in
+      *SmartTube*|*smarttube*)  touch "$S/pkg_org.smarttube.stable"; echo 2446 > "$S/ver_org.smarttube.stable" ;;
+      *dnsfilter*)              touch "$S/pkg_dnsfilter.android";   echo 1506103 > "$S/ver_dnsfilter.android" ;;
+      *dumbtv*)                 touch "$S/pkg_tv.dumbtv.home";      echo 150 > "$S/ver_tv.dumbtv.home" ;;
+      *rojectivy*|*ROJECTIVY*)  touch "$S/proj";                   echo 4710 > "$S/ver_com.spocky.projengmenu" ;;
+      *)                        echo "Performing Streamed Install" ;;
+    esac
+    echo "Performing Streamed Install"
+    echo "Success"
+    ;;
+  uninstall)
+    pkg="${!#}"; rm -f "$S/pkg_$pkg"; echo "Success"
+    ;;
+  push)
+    case "${2:-}" in
+      *Android/data*)
+        if [ "${MOCK_APP_DIR:-visible}" = hidden ]; then
+          echo "adb: error: failed to copy '${1:-}' to '${2:-}': remote couldn't create file: Permission denied"
+          exit 1
+        fi ;;
+    esac
+    printf '%s -> %s\n' "${1:-}" "${2:-}" >> "$S/pushes"
+    mkdir -p "$S/pushed"
+    ;;
+  pull) echo "" ;;
+  version) echo "Android Debug Bridge version 1.0.41" ;;
+  getprop)
+    case "$*" in
+      "ro.product.model")            echo "AFTKRT" ;;
+      "ro.build.version.name")       echo "Fire OS 8.1.8.2 (RS8182/3811)" ;;
+      "ro.build.version.fireos")     echo "8.0" ;;
+      "ro.build.version.sdk")        echo "31" ;;
+      *)                             echo "" ;;
+    esac
+    ;;
   shell)
     case "$*" in
       "getprop ro.build.version.name")   echo "Fire OS 8.1.8.2 (RS8182/3811)" ;;
       "getprop ro.build.version.fireos") echo "8.0" ;;
+      "getprop ro.build.version.sdk")    echo "31" ;;
+      "getprop ro.product.model")        echo "AFTKRT" ;;
       "pm list packages")
         echo "package:com.amazon.tv.launcher"
-        [ -f "$S/proj" ] && echo "package:com.spocky.projengmenu" ;;
-      "pm grant"*) touch "$S/hofgrant" ;;
-      "settings put secure enabled_accessibility_services "*Projectivy*)
-        echo "com.spocky.projengmenu/com.spocky.projengmenu.services.ProjectivyAccessibilityService" > "$S/a11y" ;;
-      "settings put secure enabled_accessibility_services """) rm -f "$S/a11y" ;;
-      "settings get secure enabled_accessibility_services") cat "$S/a11y" 2>/dev/null ;;
-      "settings put global private_dns_mode "*) echo hostname > "$S/pdns" ;;
-      "settings get global private_dns_mode") [ -f "$S/pdns" ] && cat "$S/pdns" || echo "off" ;;
+        echo "package:com.amazon.venezia"
+        [ -f "$S/pkgs" ] && sed 's/^/package:/' "$S/pkgs"
+        [ -f "$S/proj" ] && echo "package:com.spocky.projengmenu"
+        for f in "$S"/pkg_*; do [ -e "$f" ] && echo "package:${f##*/pkg_}"; done
+        ;;
+      "pm list packages -d")
+        [ -f "$S/disabled" ] && sed 's/^/package:/' "$S/disabled"
+        ;;
+      "pm list packages -3")
+        for f in "$S"/pkg_*; do [ -e "$f" ] && echo "package:${f##*/pkg_}"; done
+        ;;
+      "pm list packages -s")
+        # system apps in this fake TV: Amazon's own packages and android ones
+        [ -f "$S/pkgs" ] && sed 's/^/package:/' "$S/pkgs" | grep -E 'package:(com\.amazon|com\.android)'
+        ;;
+      "pm disable-user --user 0 "*)
+        p="${@: -1}"
+        case " ${MOCK_PROTECTED:-com.amazon.device.metrics com.amazon.device.software.ota} " in
+          *" $p "*) echo "Exception occurred while executing 'disable-user':"; echo "java.lang.SecurityException: Cannot disable a protected package: $p" ;;
+          *) case " ${MOCK_SYSTEM_OFF:-com.android.nfc} " in
+               *" $p "*) echo "Error: Shell cannot change component state for $p to 2" ;;
+               *) touch "$S/pkg_$p"; echo "$p" >> "$S/disabled"
+                  echo "Package $p new state: disabled" ;;
+             esac ;;
+        esac
+        ;;
+      "pm enable --user 0 "*)
+        p="${@: -1}"
+        [ -f "$S/disabled" ] && grep -vx "$p" "$S/disabled" > "$S/disabled.tmp" 2>/dev/null; mv "$S/disabled.tmp" "$S/disabled" 2>/dev/null
+        echo "Package $p new state: enabled"
+        ;;
+      "pm uninstall --user 0 "*) p="${@: -1}"; rm -f "$S/pkg_$p"; echo "Success" ;;
+      "pm uninstall "*)          p="${@: -1}"; rm -f "$S/pkg_$p"; echo "Success" ;;
+      "pm grant"*)               touch "$S/hofgrant" ;;
+      "cmd package set-home-activity "*)
+        comp="${@: -1}"; echo "${comp%%/*}" > "$S/front"; echo "Success"
+        ;;
+      "cmd package install-existing "*) p="${@: -1}"; touch "$S/pkg_$p"; echo "Package $p installed for user: 0" ;;
+      "cmd netpolicy add restrict-background-blacklist "*) echo "${@: -1}" >> "$S/netpolicy" ;;
+      "cmd netpolicy remove restrict-background-blacklist "*)
+        u="${@: -1}"; [ -f "$S/netpolicy" ] && grep -vx "$u" "$S/netpolicy" > "$S/netpolicy.tmp"; mv "$S/netpolicy.tmp" "$S/netpolicy" 2>/dev/null ;;
+      "cmd netpolicy set restrict-background "*) echo "${@: -1}" > "$S/netpolicy_set" ;;
+      "cmd netpolicy list restrict-background-blacklist") [ -f "$S/netpolicy" ] && tr '\n' ' ' < "$S/netpolicy"; echo ;;
+      "appops set "*)
+        set -- $*
+        # appops set <pkg> <op> <mode>
+        printf '%s %s=%s\n' "$3" "$4" "$5" >> "$S/appops"
+        [ "$4" = "SYSTEM_ALERT_WINDOW" ] && [ "$5" = "allow" ] && touch "$S/overlay"
+        ;;
+      "appops get "*)
+        p="$3"; op="$4"; grep "^$p $op=" "$S/appops" 2>/dev/null | tail -1 | sed 's/.*=//' ;;
+      "settings put secure enabled_accessibility_services "*)
+        v="${*#settings put secure enabled_accessibility_services }"
+        case "$v" in '""'|'') rm -f "$S/a11y" ;; *) printf '%s' "$v" > "$S/a11y" ;; esac ;;
+      "settings get secure enabled_accessibility_services") cat "$S/a11y" 2>/dev/null || echo "null" ;;
+      "settings put secure accessibility_enabled "*) echo "${@: -1}" > "$S/a11y_on" ;;
+      "settings put secure always_on_vpn_app "*) echo "${@: -1}" > "$S/vpn" ;;
+      "settings get secure always_on_vpn_app") cat "$S/vpn" 2>/dev/null || echo "null" ;;
+      "settings delete secure always_on_vpn_app") rm -f "$S/vpn" ;;
+      "settings put global private_dns_mode "*) echo "${@: -1}" > "$S/pdns" ;;
+      "settings get global private_dns_mode") cat "$S/pdns" 2>/dev/null || echo "off" ;;
       "settings put global private_dns_specifier "*) printf '%s' "${*#settings put global private_dns_specifier }" > "$S/dns" ;;
       "settings get global private_dns_specifier") cat "$S/dns" 2>/dev/null ;;
       "settings delete global private_dns_specifier") rm -f "$S/dns" ;;
-      "settings put global private_dns_mode off") rm -f "$S/pdns" ;;
-      "settings put global dns_servers "*) printf '%s' "${*#settings put global dns_servers }" > "$S/dnss" ;;
-      "settings get global dns_servers") cat "$S/dnss" 2>/dev/null ;;
       "settings delete global dns_servers") rm -f "$S/dnss" ;;
+      "settings put global dns_servers "*) printf '%s' "${*##* }" > "$S/dnss" ;;
+      "settings get global dns_servers") cat "$S/dnss" 2>/dev/null ;;
+      "settings list secure") printf 'limit_ad_tracking=0\namz_limit_ad_tracking=0\nenabled_accessibility_services=%s\n' "$(cat "$S/a11y" 2>/dev/null)" ;;
+      "settings list global") printf 'private_dns_mode=%s\nwindow_animation_scale=1.0\n' "$(cat "$S/pdns" 2>/dev/null || echo off)" ;;
+      "settings put "*) printf '%s\n' "${*#settings put }" >> "$S/settings_put" ;;
+      "settings get "*)
+        k="${*#settings get }"
+        v=$(grep "^$k " "$S/settings_put" 2>/dev/null | tail -1 | cut -d' ' -f3-)
+        if [ -n "$v" ]; then echo "$v"; else echo "null"; fi ;;
+      "settings delete "*) echo deleted ;;
       "dumpsys window")
-        case "${MOCK_FOCUS:-projectivy}" in
-          plex)   echo "  mCurrentFocus=Window{faccef6 u0 com.plexapp.android/tv.plex.app.MainActivity}" ;;
-          amazon) echo "  mCurrentFocus=Window{1a2b3c u0 com.amazon.tv.launcher/.ui.HomeActivity_vNext}" ;;
-          *)      echo "  mCurrentFocus=Window{2f9a1 u0 com.spocky.projengmenu/com.spocky.projengmenu.MainActivity}" ;;
-        esac ;;
-      # uptime in seconds: a real power cycle resets this. long_uptime simulates "user did not reboot".
+        if [ -f "$S/front" ]; then
+          printf '  mCurrentFocus=Window{abc123 u0 %s/.MainActivity}\n' "$(cat "$S/front")"
+        else
+          case "${MOCK_FOCUS:-projectivy}" in
+            plex)   echo "  mCurrentFocus=Window{faccef6 u0 com.plexapp.android/tv.plex.app.MainActivity}" ;;
+            amazon) echo "  mCurrentFocus=Window{1a2b3c u0 com.amazon.tv.launcher/.ui.HomeActivity_vNext}" ;;
+            *)      echo "  mCurrentFocus=Window{2f9a1 u0 com.spocky.projengmenu/com.spocky.projengmenu.MainActivity}" ;;
+          esac
+        fi
+        ;;
+      "dumpsys accessibility")
+        if [ -f "$S/a11y" ] && grep -q 'dumbtv\|projengmenu' "$S/a11y"; then
+          echo "Bound services:{Service[label=Guard, comp={$(cat "$S/a11y")}}]}"
+        else echo "Bound services:{}"; fi
+        ;;
+      "dumpsys package "*)
+        p="${@: -1}"
+        v=$(cat "$S/ver_$p" 2>/dev/null || echo 1)
+        echo "  versionCode=$v minSdk=25 targetSdk=33"
+        echo "  userId=$(( $(printf '%s' "$p" | cksum | cut -d' ' -f1) % 10000 + 10000 ))"
+        case " ${MOCK_SYSTEM_OFF:-com.android.nfc} " in *" $p "*) echo "  User 0: enabled=2" ;; *) echo "  User 0: enabled=0" ;; esac
+        echo "  flags=[ ]"
+        ;;
+      "dumpsys deviceidle "*) echo "Added: ${@: -1}" ;;
+      "dumpsys meminfo") echo "Total RAM: 1,500,000K (status normal)"; echo "Free RAM: 129,000K" ;;
       "cat /proc/uptime")
         if [ -f "$S/long_uptime" ]; then echo "9000.00 36000.00"; else echo "45.00 100.00"; fi ;;
-      "dumpsys package "*homeonfire*) [ -f "$S/hofgrant" ] && echo "WRITE_SECURE_SETTINGS: granted=true" ;;
-      "dumpsys deviceidle "*) echo "Added: com.spocky.projengmenu" ;;
-      # the DNS check: NextDNS answers blocked names with 0.0.0.0
-      "ping "*) echo "PING softwareupdates.amazon.com (0.0.0.0) 56(84) bytes of data." ;;
-      "appops "*) ;;
-      "am start"*) ;;
-      "input keyevent"*) ;;
+      "ping "*)
+        h="${@: -1}"
+        if [ "${MOCK_DNS:-blocked}" = blocked ]; then
+          case "$h" in
+            m.media-amazon.com|atv-ext.amazon.com|ktpx.amazon.com|a4k.amazon.com|*mas-ext*|*mas-sdk*|*appstore*) echo "PING $h (93.184.216.34) 56(84) bytes of data." ;;
+            *amazon.com|*cloudfront.net|*amazonaws.com) echo "PING $h (0.0.0.0) 56(84) bytes of data." ;;
+            *) echo "PING $h (93.184.216.34) 56(84) bytes of data." ;;
+          esac
+        else
+          echo "PING $h (52.94.236.248) 56(84) bytes of data."
+        fi
+        ;;
+      "input keyevent"*) : ;;
+      "am start"*) : ;;
+      "monkey -p "*) echo "Events injected: 1" ;;
+      "svc power reboot"*) : ;;
+      "reboot"*) : ;;
+      "mkdir -p "*) echo "${*##* }" >> "$S/mkdirs" ;;
+      "rm -f "*) : ;;
+      *) : ;;
     esac
     ;;
 esac

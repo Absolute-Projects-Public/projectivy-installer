@@ -3,8 +3,18 @@
 [![release](https://img.shields.io/github/v/release/Absolute-Projects-Public/projectivy-installer?label=release)](https://github.com/Absolute-Projects-Public/projectivy-installer/releases/latest)
 [![licence](https://img.shields.io/github/license/Absolute-Projects-Public/projectivy-installer)](LICENSE)
 
-Replaces the ad-filled Amazon Fire TV home screen with **Projectivy Launcher** on a Fire TV Stick or
-Cube running Fire OS 7 or 8, and optionally stops Amazon pushing the update that would revert it.
+Takes the ads, the tracking and the clutter out of an Amazon Fire TV Stick or Cube running Fire OS 7 or
+8, over ADB, with no root. Two ways to run it:
+
+- **Home screen only** - install Projectivy Launcher and make it the home screen. About 5 minutes.
+- **Full cleanup** - also disable around 38 Amazon ad, telemetry and experiment packages, starve the ones
+  Amazon protects, turn off ad tracking, optionally swap YouTube for SmartTube, and optionally block
+  Amazon's servers with a filter that runs on the TV itself.
+
+Every change is written to an undo log, and **Undo everything** in the menu reverses it.
+
+Right now the full cleanup lives in the **Linux and macOS** wizard. The Windows `.cmd` wizard still does
+the home screen only - the cleanup is being ported to PowerShell next.
 
 ![The setup wizard running in a terminal](docs/hero-wizard.png)
 
@@ -90,16 +100,50 @@ either.
 **Status:** working, verified live on 2026-09-26 against a Fire TV Stick 4K Max: Projectivy as the home
 screen, no ads, Home button redirected, and the settings survived a full power cycle.
 
+## What the full cleanup asks
+
+Six questions, every default is the safe one:
+
+- **Do you watch Prime Video?** yes, so its servers stay reachable. Say no and it stops working.
+- **Keep Alexa and the voice button?** yes. Say no and the microphone app is switched off too.
+- **Which home screen?** Projectivy (categories, wallpaper, app hiding), dumbtv home (54 KB, no internet
+  permission, apps and inputs only), or keep Amazon's.
+- **Block Amazon on the TV itself?** an on-device DNS filter with no account, a NextDNS profile, plain
+  Cloudflare, or nothing.
+- **Anything to remove?** nothing, unless you name it. Store apps are uninstalled and come back from the
+  Appstore; system apps are disabled instead.
+- **Replace YouTube with SmartTube?** no. Yes installs SmartTube (no ad code, account untouched) and
+  disables the stock app without deleting it.
+
+### What gets disabled
+
+Around 38 packages across ads and shopping, watch tracking (including ACR, the screen fingerprinting),
+telemetry and crash reporting, experiments, update nags, and empty demo stubs. Disabled, never deleted.
+Anything Amazon refuses to disable loses background running and background data instead.
+
+The lists live in `data/` as plain text, so you can read exactly what will happen before running it. The
+`data/never-disable.txt` list is the things that keep the TV working (the launcher itself, settings, HDMI
+switching, the remote, WebView, the Appstore) and nothing will touch them.
+
+### The on-device DNS filter
+
+A small open-source filter runs on the TV and blocks about 400 Amazon telemetry, advertising and update
+hosts. No account, no router changes, and your streaming apps keep working. On Fire OS 8 the app's own
+folder is hidden from ADB, so the list is placed in `Android/media` and you get one prompt on the TV to
+point the app at it - the wizard tells you exactly which file to pick.
+
 ## What's in this folder
 
 - `Install-Projectivy.cmd` - **double-click this** on Windows. Launches the wizard below; no command line, no admin, bypasses the execution policy for that one script.
 - `Install-Projectivy.ps1` - the Windows click-through wizard (what the .cmd runs). Guides a non-technical user through it, with pop-up instructions for each step on the TV.
 - `Install-Projectivy.sh` - the **same wizard for Linux and macOS**, text-based, no GUI dependencies.
-- `Install-Projectivy.desktop` - double-click launcher for `Install-Projectivy.sh` (needs `chmod +x` on both, see §8).
+- `Install-Projectivy.desktop` - double-click launcher for `Install-Projectivy.sh` (needs `chmod +x` on both, see section 8).
 - `setup-firestick.ps1` - Windows, non-interactive CLI equivalent.
 - `setup-firestick.sh` - Linux/macOS equivalent.
-- `tests/` - the regression suite. `./tests/run-paths.sh` runs 54 checks against a fake adb, so it needs
+- `tests/` - the regression suite. `./tests/run-paths.sh` runs 85 checks against a fake adb, so it needs
   no Fire TV at all.
+- `data/` - the package, setting and host lists the cleanup reads, as plain text.
+- `lib/cleanup.sh` - the cleanup engine: questions, snapshot, debloat, DNS filter, verify, undo.
 - `docs/` - the two published images and `make-images.py`, which draws both of them from a real captured
   session.
 
@@ -170,7 +214,7 @@ Four things are true at once and it matters which you rely on:
    an override. **If block 1 does not survive a cold boot, use block 2. Do not fight it.**
 4. **Vega OS is a hard stop.** Fire TV Stick 4K Select (Oct 2025) and Fire TV Stick HD (Apr 2026) run
    Vega OS - Linux/React Native, not Android. No sideloading, no APKs, no custom launcher. Check
-   Settings → My Fire TV → About before promising anyone anything.
+   Settings -> My Fire TV -> About before promising anyone anything.
 
 ## 3. Getting the apps onto the stick
 
@@ -201,8 +245,8 @@ https://github.com/toolicious/home-on-fire/releases/latest/download/home-on-fire
 Neither download needs a third party in the middle when the script does it: the APK comes straight from
 the Projectivy author's GitHub release and is installed by ADB.
 
-Prerequisites on the stick: **Settings → My Fire TV → About → click the device name 7×** → Developer
-Options → **ADB debugging ON** + **Apps from Unknown Sources ON**.
+Prerequisites on the stick: **Settings -> My Fire TV -> About -> click the device name 7x** -> Developer
+Options -> **ADB debugging ON** + **Apps from Unknown Sources ON**.
 
 ## 4. The commands that work
 
@@ -223,7 +267,7 @@ adb shell settings put secure enabled_accessibility_services com.spocky.projengm
 adb shell settings get secure enabled_accessibility_services
 ```
 
-Then on the TV: Projectivy → Settings → General → **Override current launcher** ON.
+Then on the TV: Projectivy -> Settings -> General -> **Override current launcher** ON.
 
 **Block 2 - only if Home still returns to Amazon (newer Fire OS 8)**
 
@@ -233,9 +277,9 @@ adb shell pm grant io.github.toolicious.homeonfire android.permission.WRITE_SECU
 adb shell am start -n io.github.toolicious.homeonfire/.MainActivity
 ```
 
-The `WRITE_SECURE_SETTINGS` grant is required because Fire OS hides/blanks Settings → Accessibility on
+The `WRITE_SECURE_SETTINGS` grant is required because Fire OS hides/blanks Settings -> Accessibility on
 most builds - it lets the app flip its own service on. One-shot, persists across reboots.
-Then: Accessibility service ON, **Choose target app...** → Projectivy, launch-on-boot ON, and
+Then: Accessibility service ON, **Choose target app...** -> Projectivy, launch-on-boot ON, and
 **turn Projectivy's `Override current launcher` back OFF** - the two hooks conflict.
 
 **Verification / recovery**
@@ -274,8 +318,8 @@ Projectivy was installed beforehand via Downloader (user-side). All four command
 ## 6. Stopping Amazon's updates - DNS, set over ADB
 
 The old exploit could permanently disable the OTA packages. That's gone:
-`com.amazon.device.software.ota` is on Amazon's protected list (`pm disable-user` → `Cannot disable a
-protected package`, `pm uninstall` → `DELETE_FAILED_INTERNAL_ERROR`), so **the update client keeps
+`com.amazon.device.software.ota` is on Amazon's protected list (`pm disable-user` -> `Cannot disable a
+protected package`, `pm uninstall` -> `DELETE_FAILED_INTERNAL_ERROR`), so **the update client keeps
 running**. DNS is the only enforcement point left, and it works on the device: Fire OS hides the
 Private DNS menu, but the Android resolver underneath still honours the setting.
 
@@ -326,7 +370,7 @@ profile independently with any DoT client:
 kdig +tls @<profile>.dns.nextdns.io softwareupdates.amazon.com
 ```
 
-Or on the TV: Settings → My Fire TV → check for updates should fail with a connection error.
+Or on the TV: Settings -> My Fire TV -> check for updates should fail with a connection error.
 
 Revert with `settings put global private_dns_mode off` + `settings delete global private_dns_specifier`
 (the scripts' `-O` / `Undo` does this). A plain-DNS fallback, `settings put global dns_servers
@@ -389,7 +433,7 @@ button. Design rules it follows:
 - **Stage 6, DNS** - offers four buttons: **NextDNS** (recommended, take the profile's DoT hostname in a
   text box), **Cloudflare** (no account, blocks nothing), **AdGuard** (ads only), **Skip**. It prints the
   seven domains for the denylist, applies what was chosen, tests whether `softwareupdates.amazon.com`
-  still resolves, and reports plainly whichever way it went. §6 has the detail.
+  still resolves, and reports plainly whichever way it went. Section 6 has the detail.
 - **Done / Undo** - Undo is on the welcome screen and the finish screen; it restores Amazon's launcher
   without uninstalling anything. The Windows wizard also writes a log file **every run**
   (`logs\install-projectivy-<timestamp>.log` beside the script) and names it in the log pane - the Linux
@@ -499,7 +543,7 @@ Design notes that matter, all of them from testing rather than theory:
   dependency on `x-terminal-emulator`, konsole or gnome-terminal by name.
 - **The trailing `read` keeps the window open** after the wizard exits, otherwise the final message
   vanishes with the terminal. It's `read -r _ || true` so the wrapper still exits 0.
-- Some file managers refuse to launch a .desktop that hasn't been marked trusted - right-click → *Allow
+- Some file managers refuse to launch a .desktop that hasn't been marked trusted - right-click -> *Allow
   Launching*, or just use `add-to-app-menu.sh` and skip the problem.
 
 The desktop file is light because the wizard has to be runnable without a desktop at all: if the
@@ -537,7 +581,7 @@ choice about whether to intercept the Home key. Both are needed on Fire OS 8.)
 ### Testing without a Fire TV
 
 ```
-./tests/run-paths.sh        # 54 assertions across 13 wizard paths, no adb or device needed
+./tests/run-paths.sh        # 85 assertions across 17 wizard paths, no adb or device needed
 ```
 
 `tests/mock-adb` fakes just enough of ADB (devices, connect, install, the specific `settings`/`getprop`/
@@ -578,12 +622,20 @@ would have:
 
 ## Sources
 
-- Projectivy Launcher - <https://github.com/spocky/miproja1> · <https://www.projectivy.app/>
+- Projectivy Launcher - <https://github.com/spocky/miproja1> - <https://www.projectivy.app/>
 - Home on Fire - <https://github.com/toolicious/home-on-fire>
 - XDA system-user exploit thread (now documenting the patch + alternatives)
   <https://xdaforums.com/t/system-user-fire-cube-stick-tv-tablet-ps7704-fireos7-rs8149-fireos8.4759215/>
 - AFTVnews on the exploit and its patch - <https://www.aftvnews.com/amazon-patches-fire-tv-exploit/>
 - TROYPOINT Projectivy guide (Downloader codes) - <https://troypoint.com/projectivy-launcher/>
+- dumbtv - <https://github.com/humblemuzzu/dumbtv> (MIT): the debloat/snapshot/undo approach and the
+  package list in `data/` are derived from it, with thanks. This project would not have known which
+  packages are safe to touch without that work.
+- personalDNSfilter by Ingo Zenz - <https://github.com/IngoZenz/personaldnsfilter> (GPL-2.0), downloaded
+  from F-Droid at install time and checksum-verified.
+- HaGeZi's Amazon tracker blocklist - <https://github.com/hagezi/dns-blocklists> (GPL-3.0), fetched at
+  install time, never redistributed here.
+- SmartTube by Yuriy Liskov - <https://github.com/yuliskov/SmartTube> (MIT).
 
 ## Credits and disclaimers
 
@@ -596,7 +648,7 @@ Licensed under the MIT licence (see `LICENSE`).
 ## AI Disclosure
 
 Development here is AI-assisted: an agent (Hermes, by Nous Research, driving models through
-OpenRouter — the model varies by task) does much of the diagnosis, research, implementation,
+OpenRouter - the model varies by task) does much of the diagnosis, research, implementation,
 documentation and release tooling. The maintainer reviews every change and owns it.
 
 That comes with the rule this project is built on: **a change ships only if it can be verified on
@@ -605,5 +657,5 @@ because the failure modes here (a launcher that will not come up, an update that
 thing) do not show up anywhere else.
 
 Contributions: AI-assisted work is welcome if you understand it and can explain the change, and if
-it comes with evidence — a reproduction, a test, or a reason. We will not accept fully-vibecoded
+it comes with evidence - a reproduction, a test, or a reason. We will not accept fully-vibecoded
 contributions, where nobody can account for the code, because the risk of regression is too high.

@@ -1,0 +1,37 @@
+# Never disabled, whatever else looks tempting. Each line is either the thing that draws the
+# screen, switches inputs, keeps the remote paired, or is needed after a factory reset.
+# Derived from the dumbtv project (github.com/humblemuzzu/dumbtv, MIT), with thanks.
+# Package ids are facts observed on Fire OS 7/8; the grouping and wording here are ours.
+
+com.amazon.tv.launcher
+com.amazon.firehomestarter
+com.amazon.tv.settings.v2
+com.amazon.tv.settings.core
+com.amazon.tv.inputpreference.service
+com.amazon.tv.routing
+com.amazon.tv.devicecontrol
+com.amazon.tv.devicecontrolsettings
+com.amazon.tv.keypolicymanager
+com.amazon.tv.livetv
+com.amazon.franktvinput
+com.amazon.tifobserver
+com.mediatek.tis
+com.mediatek.dtv.tvinput.atsctuner
+com.amazon.mediatek.livetv
+com.amazon.tv.settings.mediatek
+com.amazon.fireinputdevices
+com.amazon.autopairservice
+com.amazon.device.bluetoothpa
+com.amazon.device.blepa
+com.amazon.whisperjoin.middleware.np
+com.amazon.whisperplay.service.install
+com.amazon.tv.oobe
+com.amazon.tv.ooberesource
+com.amazon.webview.chromium
+com.amazon.venezia
+com.amazon.firebat
+com.amazon.device.messaging
+com.amazon.vizzini
+com.android.systemui
+com.android.packageinstaller
+com.android.permissioncontroller

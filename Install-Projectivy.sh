@@ -1,20 +1,30 @@
 #!/usr/bin/env bash
 # Install-Projectivy.sh - click-through wizard for Linux / macOS
 #
-# Makes Projectivy Launcher the home screen on an Amazon Fire TV Stick (Fire OS 7/8) and optionally
-# stops Amazon's updates from arriving by pointing the stick at a DNS profile. Nothing here uses the
-# old system-user exploit, which Amazon patched in Oct 2025.
+# Two jobs, one wizard:
+#   Home screen only  - install Projectivy Launcher and take over the Home button over ADB.
+#   Full cleanup      - also disable Amazon's ad and telemetry packages, starve the protected ones,
+#                       turn off ad tracking, optionally swap YouTube for SmartTube, and optionally
+#                       block Amazon's servers with a filter running on the TV itself.
+# Everything writes an undo log; Undo in the menu reverses it. Nothing uses the old system-user
+# exploit, which Amazon patched in Oct 2025.
 #
 #   ./Install-Projectivy.sh              # full wizard
 #   ./Install-Projectivy.sh --debug      # same, plus a full log under ./logs/
 #   ./Install-Projectivy.sh --no-clear   # keep the scrollback instead of clearing between steps
-#   ./Install-Projectivy.sh --undo       # restore the Amazon home screen and clear DNS
+#   ./Install-Projectivy.sh --cleanup    # jump straight to the full cleanup (same questions)
+#   ./Install-Projectivy.sh --undo       # undo everything: packages, filter, launcher, DNS
 #   ./Install-Projectivy.sh --ota-list   # just print the domains to denylist
 #
 # Double-click Install-Projectivy.desktop, or run add-to-app-menu.sh once, if you would rather not
 # use a terminal. Non-interactive equivalent: setup-firestick.sh -h
 
 set -uo pipefail
+
+# Everything this wizard needs sits next to this script: data/ (the package, setting and host
+# lists) and lib/ (the cleanup engine).
+APP_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd)"
+. "$APP_DIR/lib/cleanup.sh"
 
 PROJ_PKG='com.spocky.projengmenu'
 PROJ_SVC='com.spocky.projengmenu/com.spocky.projengmenu.services.ProjectivyAccessibilityService'
@@ -41,7 +51,8 @@ for arg in "$@"; do
   case "$arg" in
     --debug)     DEBUG=1 ;;
     --no-clear)  NO_CLEAR=1 ;;
-    --undo)      STAGE_OVERRIDE='undo' ;;
+    --undo)      STAGE_OVERRIDE='clean_undo' ;;
+    --cleanup)   MODE='full'; STAGE_OVERRIDE='prepare' ;;
     --ota-list)  for h in "${OTA_HOSTS[@]}"; do echo "$h"; done; exit 0 ;;
     -h|--help)
       sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
@@ -351,12 +362,14 @@ WHAT YOU NEED
 
 stage_mainmenu() {
   choose 'What would you like to do?' \
-    'Set up the Firestick launcher' \
-    'Undo / restore the Amazon home screen' \
+    'Full cleanup - remove the ads and tracking, replace the home screen, block Amazon (recommended)' \
+    'Home screen only - just the launcher, quicker' \
+    'Undo everything - put the TV back how it was' \
     'Exit Setup'
   case "$MENU_RESULT" in
-    'Set up the Firestick launcher') NEXT='prepare' ;;
-    'Undo / restore the Amazon home screen') NEXT='undo' ;;
+    'Full cleanup'*)  MODE='full'; NEXT='prepare' ;;
+    'Home screen only'*) MODE='home'; NEXT='prepare' ;;
+    'Undo everything'*) NEXT='clean_undo' ;;
     *) NEXT='exit' ;;
   esac
 }
@@ -370,7 +383,13 @@ stage_prepare() {
   3. In Developer Options turn ON 'Apps from Unknown Sources'.
   4. Install the app 'Downloader' (by AFTVnews) from the Fire TV search."
   pause 'Press Enter when that is done...'
-  NEXT='menu_install'
+  if [ "$MODE" = 'full' ]; then
+    # The cleanup asks which launcher it wants later, so do not ask how to install one now.
+    INSTALL_MODE='adb'
+    NEXT='menu_connect'
+  else
+    NEXT='menu_install'
+  fi
 }
 
 stage_menu_install() {
@@ -501,7 +520,7 @@ Waiting for the TV to accept the connection - this is the step that usually need
   if [ "$state" = 'device' ]; then
     ok "connected to $IP"
     log_event 'CONNECT' "authorised, state=device after ${i}s"
-    NEXT='apply'
+    if [ "$MODE" = 'full' ]; then NEXT='questions'; else NEXT='apply'; fi
     return
   fi
   log_event 'CONNECT' "FAILED, last state=${state:-none}"
@@ -525,13 +544,20 @@ stage_menu_authorise() {
 
 install_projectivy_adb() {
   title 'Downloading Projectivy 4.71 and installing it on the stick'
-  if ! curl -fL --progress-bar "$PROJ_APK_URL" -o /tmp/projectivy.apk; then
+  # A per-run file, not a fixed /tmp path: a leftover or a second wizard running at the same time
+  # would otherwise install the wrong bytes.
+  local apk
+  apk="$(mktemp "${TMPDIR:-/tmp}/projectivy.XXXXXX.apk")" || { bad 'Could not create a temp file.'; return 1; }
+  if [ -n "${CLEANUP_APK_DIR:-}" ] && [ -f "$CLEANUP_APK_DIR/$(basename "$PROJ_APK_URL")" ]; then
+    cp "$CLEANUP_APK_DIR/$(basename "$PROJ_APK_URL")" "$apk"      # tests: no network
+  elif ! curl -fL --progress-bar "$PROJ_APK_URL" -o "$apk"; then
     bad 'Download failed.'
     log_event 'INSTALL' 'APK download FAILED'
-    return 1
+    rm -f "$apk"; return 1
   fi
   log_event 'INSTALL' 'APK downloaded, running adb install -r'
-  "$ADB" install -r /tmp/projectivy.apk || warn 'Install reported an error - check the TV screen.'
+  "$ADB" install -r "$apk" || warn 'Install reported an error - check the TV screen.'
+  rm -f "$apk"
   if printf '%s' "$(adb_sh pm list packages)" | grep -qF "$PROJ_PKG"; then
     ok 'Projectivy installed'
     log_event 'INSTALL' 'package present after install'
@@ -899,6 +925,7 @@ stage_undo() {
 ADB=''
 IP=''
 INSTALL_MODE=''          # '' = not asked yet, 'adb' = install for them, 'existing' = already on the TV
+MODE='home'              # 'home' = launcher only, 'full' = the cleanup questions and debloat
 STAGE='welcome'
 NEXT=''
 INPUT_EOF=0
@@ -941,6 +968,18 @@ while :; do
     dnsdone)            stage_dnsdone ;;
     done)               stage_done ;;
     undo)               stage_undo ;;
+    questions)          wiz_questions ;;
+    plan)               plan_summary ;;
+    clean_run)          clean_begin ;;
+    clean_debloat)      clean_debloat ;;
+    clean_settings)     clean_settings ;;
+    clean_launcher)     clean_launcher ;;
+    clean_smarttube)    clean_smarttube ;;
+    clean_dns)          clean_dns ;;
+    clean_nextdns)      clean_nextdns ;;
+    clean_verify)       clean_verify ;;
+    clean_done)         clean_done ;;
+    clean_undo)         clean_undo ;;
     exit|'')            break ;;
     *)                  bad "unknown stage $STAGE"; break ;;
   esac

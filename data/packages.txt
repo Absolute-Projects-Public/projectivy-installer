@@ -1,0 +1,57 @@
+# Amazon packages this tool disables on Fire OS 7 and 8.
+#
+# Derived from the dumbtv project (github.com/humblemuzzu/dumbtv, MIT), with thanks.
+# Package ids are facts observed on Fire OS 7/8; the grouping and wording here are ours.
+# Only things that serve ads, track what you watch, report telemetry, run experiments, nag about
+# updates, or are empty demo stubs. Anything a person might actually use is in apps.txt and is
+# only touched if you name it. Disabled, never uninstalled: Undo puts every one back.
+#
+# --- ads, promos and shopping ---
+com.amazon.hybridadidservice
+com.amazon.privacypassservice
+com.amazon.shoptv.client
+com.amazon.shoptv.firetv.client
+com.amazon.sneakpeek
+com.amazon.media.recommendations
+com.amazon.systemnotices
+com.amazon.tv.website_launcher
+
+# --- tracking what you watch ---
+com.amazon.tv.acr
+com.amazon.hedwig
+
+# --- telemetry, logging and crash reporting ---
+com.amazon.tv.fw.metrics
+com.amazon.wirelessmetrics.service
+com.amazon.perfc
+com.amazon.perfcollection
+com.amazon.dp.logger
+com.amazon.logan
+com.amazon.neo.minerva.logcat
+com.amazon.ceviche
+com.amazon.connectivitydiag
+com.amazon.tigris
+com.amazon.tv.developer.dataservice
+com.amazon.ale
+com.amazon.katoch
+
+# --- experiments and remote config ---
+com.amazon.device_remote_config_sync_service
+com.amazon.tv.forcedotaupdater.v2
+com.amazon.tv.easyupgrade
+
+# --- update nags (the updater itself is protected, see protected.txt) ---
+com.amazon.tv.democontent.provider
+com.amazon.storm.lightning.tutorial
+
+# --- demos, tutorials and empty stubs ---
+com.amazon.tmm.tutorial
+com.amazon.tv.releasenotes
+com.amazon.dummy.alarmclock
+com.amazon.dummy.calendar
+com.amazon.dummy.contacts
+com.amazon.dummy.gallery
+com.amazon.dummy.music
+com.amazon.dummy.settings
+com.android.traceur
+com.android.nfc
