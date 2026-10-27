@@ -324,5 +324,16 @@ check "removes the DNS filter"                  "$(contains "$OUT" 'DNS filter r
 check "gives HOME back to Amazon"               "$(contains "$OUT" 'Amazon home screen restored'; echo $?)"
 echo
 
+# ---- R: run the cleanup twice, then undo once: nothing may be left disabled ----
+echo "Path R: two cleanup runs, then a single undo"
+rm -rf "$TMP/state"; mkdir -p "$TMP/state"; seed_device
+SETUP_IN="1\n\n1\n192.168.1.100\ny\ny\n1\n4\nn\n\n1\n1\n"
+OUT="$(printf '%b' "$SETUP_IN" | timeout 120 bash "$TMP/wizard.sh" 2>/dev/null)"
+OUT="$(printf '%b' "$SETUP_IN" | timeout 120 bash "$TMP/wizard.sh" 2>/dev/null)"
+check "second run leaves already-off packages alone" "$(contains "$OUT" 'already off'; echo $?)"
+OUT="$(printf '%b' '192.168.1.100\n\n' | timeout 120 bash "$TMP/wizard.sh" --undo 2>/dev/null)"
+check "one undo clears every disabled package"   "$([ ! -s "$TMP/state/disabled" ]; echo $?)"
+echo
+
 printf 'passed %d, failed %d\n' "$PASS" "$FAIL"
 [ "$FAIL" = 0 ]

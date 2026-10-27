@@ -133,8 +133,11 @@ Run end to end against a Fire TV Stick 4K Max (2nd gen) on Fire OS 8.1.8.5:
 - 32 packages disabled, 6 starved, all 13 ad and animation settings written (the settings loop needed a
   fix that only the real device exposed - ADB was eating its own input, so just one of the thirteen had
   been applied).
-- the home screen handed over with `cmd package set-home-activity` and confirmed by reading the focused
-  window - **no manual toggle needed on that build**.
+- the home screen: `cmd package set-home-activity` answers "Success" on 8.1.8.5 and changes nothing
+  (Amazon's launcher declares HOME at priority 950 and keeps it, even after a reboot). Projectivy's own
+  accessibility guard is what actually moves HOME, and it only does so when its in-app
+  **Override current launcher** switch is on. So that one switch is still a step on Fire OS 8 - the tool
+  checks where HOME really lands and tells you when it needs it.
 - SmartTube installed (versionCode 2446) and the stock YouTube app disabled, both verified.
 - Plex, the Appstore, Settings and the launcher all still open afterwards.
 - the on-device DNS filter is the one part that cannot be finished remotely on Fire OS 8; see below.

@@ -910,7 +910,7 @@ stage_undo() {
   fi
   title "Restoring the Amazon home screen on $IP"
   timeout 20 "$ADB" connect "${IP}:5555" >/dev/null 2>&1 || true
-  adb_do settings put secure enabled_accessibility_services '""'
+  a11y_remove "$PROJ_SVC"
   adb_do appops set "$PROJ_PKG" SYSTEM_ALERT_WINDOW default
   adb_do dumpsys deviceidle whitelist "-$PROJ_PKG"
   adb_do am start -n com.amazon.tv.launcher/.ui.HomeActivity_vNext

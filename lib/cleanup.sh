@@ -303,6 +303,7 @@ $(data_list alexa.txt)"
     case "$never" in *" $p "*) printf '  %-44s kept (never-disable)\n' "$p"; n_skip=$((n_skip+1)); continue ;; esac
     case "$keep_pkgs" in *" $p "*) printf '  %-44s kept (you asked)\n' "$p"; n_skip=$((n_skip+1)); continue ;; esac
     if ! present_pkg "$p"; then printf '  %-44s not on this TV\n' "$p"; n_abs=$((n_abs+1)); continue; fi
+    if pkg_disabled "$p"; then printf '  %-44s already off\n' "$p"; continue; fi
     state=$(disable_pkg "$p")
     case "$state" in
       disabled)  printf '  %-44s off\n' "$p"; n_dis=$((n_dis+1)); printf 'pkg\t%s\tdisabled\n' "$p" >> "$UNDO_LOG" ;;
@@ -382,8 +383,29 @@ a11y_add() {  # keep every other service, add ours
     *"$comp"*) : ;;
     *) cur="$cur:$comp" ;;
   esac
-  adb_do settings put secure enabled_accessibility_services "$cur"
+  # Clearing first makes the accessibility manager rebind a service whose process died. Without
+  # this, writing the same value back is a no-op and the launcher's guard never re-arms.
+  adb_do settings put secure enabled_accessibility_services '""'
+  sleep 1
+  adb_do settings put secure accessibility_enabled 0
   adb_do settings put secure accessibility_enabled 1
+  adb_do settings put secure enabled_accessibility_services "$cur"
+}
+
+a11y_remove() {  # remove only <component>, leaving every other service the user has
+  local comp="$1" cur parts out='' p
+  cur=$(adb_sh settings get secure enabled_accessibility_services | tr -d '\r')
+  case "$cur" in ''|null) return 0 ;; esac
+  IFS=':' read -r -a parts <<< "$cur"
+  for p in "${parts[@]}"; do
+    [ "$p" = "$comp" ] && continue
+    out="${out:+$out:}$p"
+  done
+  if [ -z "$out" ]; then
+    adb_do settings put secure enabled_accessibility_services '""'
+  else
+    adb_do settings put secure enabled_accessibility_services "$out"
+  fi
 }
 
 try_set_home() {  # try_set_home <pkg>/<activity> <package>  -> 0 if it actually came to the front
@@ -417,7 +439,9 @@ clean_launcher() {
       adb_do dumpsys deviceidle whitelist "+$PROJ_PKG"
       a11y_add "$PROJ_SVC"
       printf 'launcher\tprojectivy\n' >> "$UNDO_LOG"
-      if try_set_home "$PROJ_PKG/.MainActivity" "$PROJ_PKG"; then
+      # Fire OS 8 answers "Success" to set-home-activity and keeps Amazon's launcher anyway (priority
+      # 950), so this probe only passes when Projectivy's own guard is armed. Verified on 8.1.8.5.
+      if try_set_home "$PROJ_PKG/.ui.home.MainActivity" "$PROJ_PKG"; then
         ok 'Projectivy is the home screen - no remote presses needed'
       else
         warn "Amazon still owns the Home button on this build."
@@ -806,19 +830,25 @@ clean_undo() {
   timeout 20 "$ADB" connect "${IP}:5555" >/dev/null 2>&1 || true
   SDK_INT=$(adb_sh getprop ro.build.version.sdk | tr -dc '0-9'); SDK_INT="${SDK_INT:-0}"
 
-  # newest undo log wins; fall back to the newest snapshot if there is none
-  if [ -z "$UNDO_LOG" ] || [ ! -s "$UNDO_LOG" ]; then
-    UNDO_LOG=$(ls -1t "${LOGDIR:-./logs}"/cleanup-*/undo.tsv 2>/dev/null | head -1)
-  fi
-  if [ -n "$UNDO_LOG" ] && [ -s "$UNDO_LOG" ]; then
-    dim "Reading $UNDO_LOG"
-    clean_undo_packages
+  # Every run writes its own log, so undo replays all of them, newest first: a second run must not
+  # lose the changes the first one made.
+  local logs=() f
+  while IFS= read -r f; do logs+=("$f"); done < <(ls -1t "${LOGDIR:-./logs}"/cleanup-*/undo.tsv 2>/dev/null)
+  if [ "${#logs[@]}" -gt 0 ]; then
+    for f in "${logs[@]}"; do
+      [ -s "$f" ] || continue
+      dim "Reading $f"
+      UNDO_LOG="$f"
+      clean_undo_packages
+    done
   else
     warn 'No cleanup log found - only clearing the launcher hooks and DNS.'
   fi
 
-  # launcher hooks and DNS: clear whether or not there was a log
-  adb_do settings put secure enabled_accessibility_services '""'
+  # launcher hooks and DNS: clear whether or not there was a log. Only our own service comes out -
+  # wiping the whole list would also disable a screen reader someone might be using.
+  a11y_remove "$PROJ_SVC"
+  a11y_remove "$DUMBTV_SVC"
   adb_do cmd package set-home-activity com.amazon.tv.launcher/.ui.HomeActivity_vNext
   adb_do am start -n com.amazon.tv.launcher/.ui.HomeActivity_vNext
   adb_do settings delete secure always_on_vpn_app

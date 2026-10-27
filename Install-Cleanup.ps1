@@ -497,8 +497,25 @@ function Add-A11y {
     if ([string]::IsNullOrWhiteSpace($cur) -or $cur -eq 'null') { $new = $Component }
     elseif ($cur -like "*$Component*") { $new = $cur }
     else { $new = "$cur`:$Component" }
-    [void](Invoke-AdbShell 'settings' 'put' 'secure' 'enabled_accessibility_services' $new)
+    # Clear first: the accessibility manager only rebinds a service whose process died when the
+    # value actually changes. Writing the same string back is a no-op and the guard never arms.
+    [void](Invoke-AdbShell 'settings' 'put' 'secure' 'enabled_accessibility_services' '""')
+    Start-Sleep -Seconds 1
+    [void](Invoke-AdbShell 'settings' 'put' 'secure' 'accessibility_enabled' '0')
     [void](Invoke-AdbShell 'settings' 'put' 'secure' 'accessibility_enabled' '1')
+    [void](Invoke-AdbShell 'settings' 'put' 'secure' 'enabled_accessibility_services' $new)
+}
+
+function Remove-A11y {
+    param([string]$Component)
+    $cur = (Invoke-AdbShell 'settings' 'get' 'secure' 'enabled_accessibility_services').Trim()
+    if ([string]::IsNullOrWhiteSpace($cur) -or $cur -eq 'null') { return }
+    $keep = @($cur -split ':' | Where-Object { $_ -and $_ -ne $Component })
+    if ($keep.Count -eq 0) {
+        [void](Invoke-AdbShell 'settings' 'put' 'secure' 'enabled_accessibility_services' '""')
+    } else {
+        [void](Invoke-AdbShell 'settings' 'put' 'secure' 'enabled_accessibility_services' ($keep -join ':'))
+    }
 }
 
 function Try-SetHome {
@@ -538,7 +555,8 @@ function Install-Launcher {
             [void](Invoke-AdbShell 'dumpsys' 'deviceidle' 'whitelist' "+$PROJ_PKG")
             Add-A11y $PROJ_SVC
             Add-Undo 'launcher' 'projectivy' ''
-            if (Try-SetHome "$PROJ_PKG/.MainActivity" $PROJ_PKG) {
+            # Fire OS 8 answers Success to set-home-activity and keeps Amazon's launcher anyway.
+    if (Try-SetHome "$PROJ_PKG/.ui.home.MainActivity" $PROJ_PKG) {
                 Good 'Projectivy is the home screen - no remote presses needed'
             } else {
                 Warn2 'Amazon still owns the Home button on this build.'
@@ -821,7 +839,8 @@ function Invoke-Undo {
         Warn2 'No cleanup log found - only clearing the launcher hooks and DNS.'
     }
 
-    [void](Invoke-AdbShell 'settings' 'put' 'secure' 'enabled_accessibility_services' '""')
+    Remove-A11y $PROJ_SVC
+    Remove-A11y $DUMBTV_SVC
     [void](Invoke-AdbShell 'cmd' 'package' 'set-home-activity' 'com.amazon.tv.launcher/.ui.HomeActivity_vNext')
     [void](Invoke-AdbShell 'am' 'start' '-n' 'com.amazon.tv.launcher/.ui.HomeActivity_vNext')
     [void](Invoke-AdbShell 'settings' 'delete' 'secure' 'always_on_vpn_app')
