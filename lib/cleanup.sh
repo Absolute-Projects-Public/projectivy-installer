@@ -441,10 +441,25 @@ try_set_home() {  # try_set_home <pkg>/<activity> <package>  -> 0 if it actually
 }
 
 clean_launcher() {
+  # Only one launcher guard may be active. If another launcher is installed and hijacking HOME,
+  # its accessibility service fights the one we are about to arm, and the user ends up with the
+  # wrong home screen. Remove every guard we know how to remove first, then arm the chosen one.
+  local other=''
+  a11y_remove "$PROJ_SVC"
+  a11y_remove "$DUMBTV_SVC"
+  case "$WIZ_LAUNCHER" in
+    *dumbtv*) other="$PROJ_PKG" ;;
+    *)        other="$DUMBTV_PKG" ;;
+  esac
+  if [ -n "$other" ] && present_pkg "$other"; then
+    adb_do am force-stop "$other"
+    dim "Switched off the other launcher's Home hook ($other) so they cannot fight."
+  fi
+
   case "$WIZ_LAUNCHER" in
     amazon)
       title "Leaving Amazon's home screen in place"
-      ok 'Ads are already gone from the rows themselves - no launcher change needed.'
+      ok 'Amazon gets the Home button back; the other launchers keep their hooks switched off.'
       printf 'launcher\tamazon\n' >> "$UNDO_LOG"; NEXT='clean_smarttube' ; return ;;
     projectivy)
       title 'Installing Projectivy Launcher'
@@ -460,13 +475,12 @@ clean_launcher() {
       adb_do dumpsys deviceidle whitelist "+$PROJ_PKG"
       a11y_add "$PROJ_SVC"
       printf 'launcher\tprojectivy\n' >> "$UNDO_LOG"
-      # Fire OS 8 answers "Success" to set-home-activity and keeps Amazon's launcher anyway (priority
-      # 950), so this probe only passes when Projectivy's own guard is armed. Verified on 8.1.8.5.
+      start_launcher_once "$PROJ_PKG" "$PROJ_PKG/.ui.home.MainActivity"
       if try_set_home "$PROJ_PKG/.ui.home.MainActivity" "$PROJ_PKG"; then
-        ok 'Projectivy is the home screen - no remote presses needed'
+        ok 'Projectivy is the home screen'
       else
-        warn "Amazon still owns the Home button on this build."
-        dim 'Press it once yourself: Projectivy > Settings > General > Override current launcher = ON'
+        warn 'Amazon still owns the Home button on this build.'
+        dim 'On the TV: Projectivy > Settings > General > Override current launcher = ON'
         dim 'That switch lives in Projectivy own settings, which ADB cannot write.'
         pause 'Press Enter once that switch is on...'
       fi ;;
@@ -478,7 +492,10 @@ clean_launcher() {
         local tmp; tmp="$(mktemp -d)"
         if fetch_verify "$DUMBTV_URL" "$DUMBTV_SHA256" "$tmp/$DUMBTV_PKG.apk"; then
           local out; out=$("$ADB" install -r "$tmp/$DUMBTV_PKG.apk" 2>&1 </dev/null | tail -1)
-          present_pkg "$DUMBTV_PKG" || { warn "dumbtv home did not install: $out"; NEXT='clean_smarttube'; rm -rf "$tmp"; return; }
+          if ! present_pkg "$DUMBTV_PKG"; then
+            warn "dumbtv home did not install: $out"
+            NEXT='clean_smarttube'; rm -rf "$tmp"; return
+          fi
           ok 'dumbtv home installed (checksum verified)'
         else
           warn 'Could not download dumbtv home - skipping the launcher step.'
@@ -488,15 +505,25 @@ clean_launcher() {
       fi
       a11y_add "$DUMBTV_SVC"
       printf 'launcher\tdumbtv\n' >> "$UNDO_LOG"
+      start_launcher_once "$DUMBTV_PKG" "$DUMBTV_HOME"
       if try_set_home "$DUMBTV_HOME" "$DUMBTV_PKG"; then
         ok 'dumbtv home is the home screen'
       else
         warn 'Amazon still owns the Home button on this build.'
-        dim 'dumbtv home needs its accessibility guard bound. Open it once from the apps row.'
+        dim 'dumbtv home needs its guard to bind: open it once from the TV apps row, then press Home.'
         pause 'Press Enter once dumbtv home has opened on the TV...'
       fi ;;
   esac
   NEXT='clean_smarttube'
+}
+
+# Start the launcher once so its guard has a chance to bind before we test HOME.
+start_launcher_once() {
+  local pkg="$1" comp="$2"
+  adb_do am start -n "$comp"
+  sleep 3
+  log_event 'CLEAN' "started $pkg once so its guard can bind"
+  return 0
 }
 
 # ---- SmartTube ------------------------------------------------------------

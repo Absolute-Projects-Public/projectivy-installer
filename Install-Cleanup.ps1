@@ -518,6 +518,14 @@ function Remove-A11y {
     }
 }
 
+function Start-LauncherOnce {
+    # Start it once so its guard has a chance to bind before we test HOME.
+    param([string]$Pkg, [string]$Component)
+    [void](Invoke-AdbShell 'am' 'start' '-n' $Component)
+    Start-Sleep -Seconds 3
+    Dim2 "started $Pkg once so its guard can bind"
+}
+
 function Try-SetHome {
     param([string]$Component, [string]$Pkg)
     [void](Invoke-AdbShell 'cmd' 'package' 'set-home-activity' $Component)
@@ -530,10 +538,19 @@ function Try-SetHome {
 }
 
 function Install-Launcher {
+    # Only one launcher guard may be active: another launcher's service fights ours and the user
+    # ends up with the wrong home screen. Remove every guard we know, then arm the chosen one.
+    Remove-A11y $PROJ_SVC
+    Remove-A11y $DUMBTV_SVC
+    $other = if ($script:Launcher -eq 'dumbtv') { $PROJ_PKG } else { $DUMBTV_PKG }
+    if (Test-Pkg $other) {
+        [void](Invoke-AdbShell 'am' 'force-stop' $other)
+        Dim2 "Switched off the other launcher's Home hook ($other) so they cannot fight."
+    }
     switch ($script:Launcher) {
         'amazon' {
             Step "Leaving Amazon's home screen in place"
-            Good 'Ads are already gone from the rows themselves - no launcher change needed.'
+            Good "Amazon gets the Home button back; the other launchers keep their hooks switched off."
             Add-Undo 'launcher' 'amazon' ''
             return
         }
@@ -555,6 +572,7 @@ function Install-Launcher {
             [void](Invoke-AdbShell 'dumpsys' 'deviceidle' 'whitelist' "+$PROJ_PKG")
             Add-A11y $PROJ_SVC
             Add-Undo 'launcher' 'projectivy' ''
+            Start-LauncherOnce $PROJ_PKG "$PROJ_PKG/.ui.home.MainActivity"
             # Fire OS 8 answers Success to set-home-activity and keeps Amazon's launcher anyway.
     if (Try-SetHome "$PROJ_PKG/.ui.home.MainActivity" $PROJ_PKG) {
                 Good 'Projectivy is the home screen - no remote presses needed'
@@ -577,6 +595,7 @@ function Install-Launcher {
             }
             Add-A11y $DUMBTV_SVC
             Add-Undo 'launcher' 'dumbtv' ''
+            Start-LauncherOnce $DUMBTV_PKG "$DUMBTV_PKG/.Home"
             if (Try-SetHome "$DUMBTV_PKG/.Home" $DUMBTV_PKG) { Good 'dumbtv home is the home screen' }
             else {
                 Warn2 'Amazon still owns the Home button on this build.'

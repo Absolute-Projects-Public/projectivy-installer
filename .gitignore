@@ -12,3 +12,4 @@ Thumbs.db
 *.swp
 # build artefacts
 *.zip
+.git-msg.txt

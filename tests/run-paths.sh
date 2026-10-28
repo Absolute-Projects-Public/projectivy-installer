@@ -279,7 +279,7 @@ check "reports a per-package summary"           "$(contains "$OUT" 'disabled,'; 
 check "tightens every ad setting (13)"          "$(contains "$OUT" '13 setting(s) tightened'; echo $?)"
 check "the last setting really was applied"     "$(grep -q 'global transition_animation_scale 0.5' "$TMP/state/settings_put" 2>/dev/null; echo $?)"
 check "installs Projectivy"                     "$(contains "$OUT" 'Projectivy installed'; echo $?)"
-check "takes HOME without the manual toggle"    "$(contains "$OUT" 'no remote presses needed'; echo $?)"
+check "takes the front and reports it"          "$(contains "$OUT" 'Projectivy is the home screen'; echo $?)"
 check "installs the on-device filter"           "$(contains "$OUT" 'Filter installed'; echo $?)"
 check "builds a blocklist"                      "$(contains "$OUT" 'hosts in the list'; echo $?)"
 check "verifies the blocked hosts"              "$(contains "$OUT" 'is blocked'; echo $?)"
@@ -333,6 +333,20 @@ OUT="$(printf '%b' "$SETUP_IN" | timeout 120 bash "$TMP/wizard.sh" 2>/dev/null)"
 check "second run leaves already-off packages alone" "$(contains "$OUT" 'already off'; echo $?)"
 OUT="$(printf '%b' '192.168.1.100\n\n' | timeout 120 bash "$TMP/wizard.sh" --undo 2>/dev/null)"
 check "one undo clears every disabled package"   "$([ ! -s "$TMP/state/disabled" ]; echo $?)"
+echo
+
+# ---- S: switching launchers must disarm the other launcher's Home hook ----------
+# Reported from a real run: with Projectivy already hijacking HOME, choosing dumbtv home left
+# Projectivy in charge. Two guards were enabled at once.
+echo "Path S: choosing dumbtv home disarms Projectivy's Home hook"
+rm -rf "$TMP/state"; mkdir -p "$TMP/state"; seed_device
+touch "$TMP/state/proj"
+printf '%s' "com.spocky.projengmenu/com.spocky.projengmenu.services.ProjectivyAccessibilityService" > "$TMP/state/a11y"
+OUT="$(printf '%b' '1\n\n1\n192.168.1.100\ny\ny\n2\n4\nn\n\n1\n1\n' | timeout 120 bash "$TMP/wizard.sh" 2>/dev/null)"
+check "says the other launcher was switched off"   "$(contains "$OUT" 'other launcher'; echo $?)"
+check "Projectivy's hook is gone from accessibility" "$(not_contains "$(cat "$TMP/state/a11y" 2>/dev/null)" 'projengmenu'; echo $?)"
+check "dumbtv's hook is enabled instead"           "$(contains "$(cat "$TMP/state/a11y" 2>/dev/null)" 'tv.dumbtv.home.Guard'; echo $?)"
+check "dumbtv home takes the front"                "$(contains "$OUT" 'dumbtv home is the home screen'; echo $?)"
 echo
 
 printf 'passed %d, failed %d\n' "$PASS" "$FAIL"
