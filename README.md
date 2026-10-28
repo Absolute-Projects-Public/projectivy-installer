@@ -138,6 +138,51 @@ Verified on a Fire TV Stick 4K Max (2nd gen, Fire OS 8.1.8.5): cold boot, warm r
 standby all land on the chosen launcher once Home on Fire is armed. Projectivy's own "Override
 current launcher" switch must be OFF while Home on Fire is in use, or the two fight each other.
 
+## Android TV (Sony, TCL, Philips, Hisense, Shield)
+
+This is not a Fire TV, so most of this tool does not apply. There is no Projectivy step, no Amazon
+launcher at priority 950, and the debloat list in `data/packages.txt` is Amazon package names. The
+first menu offers a direct path to dumbtv's own installer, which is the better tested one on Android TV:
+
+```
+1: This tool  ->  for Fire TV
+2: dumbtv's tool  ->  launcher only, or their full pass, on any Android TV
+```
+
+It detects the device type over ADB, warns that their debloat list is Fire specific, offers their
+launcher alone as the safe half, and runs their script with `ANDROID_SERIAL` set so it cannot touch a
+second TV on the same network. Manually, that is:
+
+```
+git clone --depth 1 https://github.com/humblemuzzu/dumbtv
+cd dumbtv
+ANDROID_SERIAL=<tv-ip>:5555 ./launcher/install.sh     # launcher only
+ANDROID_SERIAL=<tv-ip>:5555 ./scripts/all.sh          # full pass, reboots twice
+```
+
+Two things found on a Sony BRAVIA 4K UR3 (Android 10) that will waste an evening otherwise:
+
+- **Google Play Protect stalls sideloads.** With `package_verifier_enable=1` the TV shows a "blocked"
+  prompt and `adb install` hangs with no error at all, which looks exactly like a dead network. Clear it
+  first and put it back afterwards:
+
+```
+adb shell settings put global package_verifier_enable 0
+adb shell settings put global verifier_verify_adb_installs 0
+```
+
+- **`cmd package set-home-activity` says "Success" and changes nothing here.** Same behaviour as on Fire
+  OS 8, different cause. What does work on Android TV is disabling the stock launcher, which is what
+  dumbtv documents for Android TV:
+
+```
+adb shell pm disable-user --user 0 com.google.android.tvlauncher
+adb reboot
+```
+
+  Reverse it with `adb shell pm enable com.google.android.tvlauncher`. Verified on the BRAVIA: after the
+  reboot it boots straight into dumbtv home, YouTube still launches, and Home returns to dumbtv.
+
 ## What the full cleanup asks
 
 Six questions, every default is the safe one:

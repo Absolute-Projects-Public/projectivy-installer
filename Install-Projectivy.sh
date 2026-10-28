@@ -436,11 +436,17 @@ stage_scan() {
 
 # ---------------------------------------------------------------- stages
 stage_welcome() {
-  title 'Projectivy Launcher - setup wizard'
-  body "This removes the ads from an Amazon Fire TV Stick by making Projectivy Launcher the home screen,
-and can optionally stop Amazon's updates from arriving and undoing it again.
+  title 'Fire TV and Android TV - setup wizard'
+  body "Two jobs, one wizard.
 
-It takes about 15 minutes and two trips to the TV. Nothing is deleted.
+On a Fire TV Stick it removes the ads and the tracking, installs the home screen you chose, and can
+optionally stop Amazon's updates from arriving and undoing it again.
+
+On an Android TV (Sony, TCL, Philips, Hisense, Xiaomi, Shield) there is a direct path to dumbtv's own
+installer, which is the better tested one there and does not need Projectivy at all - pick it from the
+first menu.
+
+It takes about 15 minutes and two trips to the TV. Nothing is deleted without asking.
 
 WHAT YOU NEED
   1. The stick plugged in, on the same wi-fi as this computer.
@@ -472,52 +478,137 @@ stage_mainmenu() {
   esac
 }
 
+tv_facts() {  # PLATFORM / MAKER / MODEL from whatever adb is pointed at
+  PLATFORM='androidtv'; MAKER=''; MODEL=''; OSNAME=''
+  OSNAME=$(adb_sh getprop ro.build.version.name 2>/dev/null | tr -d '\r')
+  MAKER=$(adb_sh getprop ro.product.manufacturer 2>/dev/null | tr -d '\r')
+  MODEL=$(adb_sh getprop ro.product.model 2>/dev/null | tr -d '\r')
+  case "$OSNAME" in *Fire*) PLATFORM='fireos' ;; esac
+}
+
+dumbtv_clone() {  # print the path to a local dumbtv checkout, cloning when git is available
+  local dest="$HOME/dumbtv"
+  if [ -d "$dest/.git" ]; then printf '%s' "$dest"; return 0; fi
+  if [ "${FT_SKIP_DOWNLOAD:-0}" = 1 ]; then
+    mkdir -p "$dest/launcher" "$dest/scripts"; printf '%s' "$dest"; return 0
+  fi
+  command -v git >/dev/null 2>&1 || return 1
+  git clone --depth 1 https://github.com/humblemuzzu/dumbtv "$dest" >/dev/null 2>&1 || return 1
+  printf '%s' "$dest"
+}
+
 stage_dumbtv() {
   title "dumbtv's own tool"
-  body "dumbtv (github.com/humblemuzzu/dumbtv) is the project this one learned the cleanup from. Its
-scripts are the reference implementation, tested by owners of about twenty TVs and sticks, and its
-device catalogue is worth reading before you start.
+  body "dumbtv (github.com/humblemuzzu/dumbtv) is the project this one learned the cleanup from, and it is
+the only one of the two that was built for anything other than a Fire TV.
 
-Two honest differences: it expects a shell rather than a click-through wizard, and its on-device DNS
-filter still needs the same manual step on Fire OS 8. What it has that this tool does not is breadth
-of device coverage.
+  Fire OS      debloat, own home screen, on-device DNS filter
+  Android TV   same, with its own package list and by disabling the stock launcher
+               (Sony, TCL, Philips, Hisense, Xiaomi, Shield)
+  Samsung, LG, Roku, VIDAA, Vizio, Saphi
+               no shell, so no path at all - block it at the router instead
 
-The commands are:
+Its scripts are the reference implementation. Its launcher is 41 KB, open source and asks for no
+permissions, and on Android TV it takes HOME the normal way rather than hijacking it."
 
-  git clone https://github.com/humblemuzzu/dumbtv
-  cd dumbtv
-  ./scripts/all.sh
+  if [ -z "$IP" ]; then
+    printf 'TV IP address: '
+    if ! read -r IP; then INPUT_EOF=1; NEXT='mainmenu'; return; fi
+    [ -n "$IP" ] || { warn 'No address given.'; NEXT='mainmenu'; return; }
+  fi
+  ensure_adb >/dev/null 2>&1 || true
+  [ -n "$ADB" ] && timeout 15 "$ADB" connect "${IP}:5555" >/dev/null 2>&1
+  tv_facts
+  local plat_text="$PLATFORM"
+  case "$PLATFORM" in
+    fireos)
+      body "This one says: $OSNAME - a Fire OS device. Their full pass covers it, launcher included." ;;
+    *)
+      body "This one says: ${MAKER:-unknown maker} ${MODEL:-unknown model}, $OSNAME.
 
-Run them in a terminal. It asks its own questions - Prime Video, Alexa, the home screen, the DNS
-filter, apps to remove, SmartTube - and every change is reversible with ./scripts/restore.sh."
-  choose 'What next?' \
-    'Download dumbtv for me, then I will run it' \
-    'Just leave me the instructions' \
-    'Back to the menu'
-  case "$MENU_RESULT" in
-    'Download dumbtv'*)
-      if command -v git >/dev/null 2>&1; then
-        local dest="$HOME/dumbtv"
-        if [ -d "$dest/.git" ]; then
-          ok "dumbtv is already at $dest"
-        elif git clone --depth 1 https://github.com/humblemuzzu/dumbtv "$dest" >/dev/null 2>&1; then
-          ok "downloaded to $dest"
-        else
-          warn 'The download failed. Grab the ZIP from github.com/humblemuzzu/dumbtv instead.'
-        fi
-        [ -d "$dest" ] && body "
-Now run:
-
-  cd $dest && ./scripts/all.sh"
-      else
-        warn 'git is not installed here. Download the ZIP from github.com/humblemuzzu/dumbtv instead.'
-      fi
-      pause 'Press Enter to go back...'
-      NEXT='mainmenu' ;;
-    'Back to the menu') NEXT='mainmenu' ;;
-    *) pause 'Press Enter to go back...'; NEXT='mainmenu' ;;
+That is Android TV, where their launcher is the best-tested half. Their debloat list is written for
+Fire TV, so the full pass there proposes packages through discover.sh instead of a verified list -
+read what it suggests before agreeing. The launcher alone is the safe, high-value piece." ;;
   esac
+
+  choose 'What do you want from their repo?' \
+    'Their launcher only - dumbtv home, and take over HOME' \
+    'Their full pass - debloat, launcher and the DNS filter' \
+    'Only fetch it and show me the commands' \
+    'Back to the menu'
+  local what="$MENU_RESULT"
+  case "$what" in
+    'Back to the menu') NEXT='mainmenu'; return ;;
+  esac
+
+  local dest
+  if ! dest=$(dumbtv_clone); then
+    bad 'Could not fetch their repo. Download the ZIP from github.com/humblemuzzu/dumbtv instead.'
+    pause 'Press Enter to go back...'; NEXT='mainmenu'; return
+  fi
+  ok "their repo is at $dest"
+
+  # On Android TV, Google Play Protect intercepts adb installs: the TV shows a "blocked" prompt and the
+  # installer waits forever with no error of its own. Measured on a Sony BRAVIA, Android 10.
+  if [ "$PLATFORM" = 'androidtv' ]; then
+    local ver; ver=$(adb_sh settings get global package_verifier_enable 2>/dev/null | tr -d '\r')
+    case "$ver" in
+      1|null|'')
+        warn 'Play Protect verifies adb installs on this TV. That makes their installer hang on a prompt shown on the TV, with no error here.'
+        if ask_yes 'Turn that verification off for this install (reversible)?'; then
+          adb_do settings put global package_verifier_enable 0
+          adb_do settings put global verifier_verify_adb_installs 0
+          log_event 'PLAYPROTECT' 'package verifier disabled for this install'
+          dim 'To put it back: settings put global package_verifier_enable 1'
+        else
+          dim 'If their installer stalls, that prompt is why: accept it on the TV, or clear the flag and retry.'
+        fi ;;
+    esac
+  fi
+
+  case "$what" in
+    'Their launcher only'*)
+      body "Their launcher installer downloads the release APK, checks its SHA-256 against the pinned value,
+installs it, then moves HOME to it. On Android TV that means disabling the stock launcher, which their
+script does for you and their restore.sh reverses.
+
+It runs from here with ANDROID_SERIAL set, so it cannot touch the wrong TV if you have two connected."
+      if ask_yes 'Run their launcher installer now?'; then
+        title 'Their script is running'
+        ( cd "$dest" && ANDROID_SERIAL="${IP}:5555" ./launcher/install.sh )
+        case $? in
+          0) ok 'their launcher installer finished' ;;
+          *) warn 'it reported an error - read its output above, and their docs/GOTCHAS.md covers the common ones' ;;
+        esac
+      fi
+      body "Afterwards, check it: press Home. If the stock launcher still wins, their launcher/README.md has
+the per-TV step (some Sony sets keep HOME until the stock launcher is disabled by hand)." ;;
+    'Their full pass'*)
+      body "This is their all.sh: preflight, configure (it asks what to keep), debloat, lockdown, the DNS filter,
+the launcher, and an optional SmartTube step. It reboots the TV twice and takes about ten minutes.
+
+It takes over the terminal from here. Their restore.sh reverses it."
+      if ask_yes 'Start their full pass now?'; then
+        title 'Their script is running'
+        ( cd "$dest" && ANDROID_SERIAL="${IP}:5555" ./scripts/all.sh )
+        case $? in
+          0) ok 'their pass finished' ;;
+          *) warn 'it stopped early - read the output above; restore.sh puts everything back' ;;
+        esac
+      fi ;;
+    *)
+      body "Run these yourself, with the TV connected:
+
+  cd $dest
+  ANDROID_SERIAL=${IP}:5555 ./launcher/install.sh     # launcher only
+  ANDROID_SERIAL=${IP}:5555 ./scripts/all.sh          # the full pass
+
+Every script takes --dry-run, and ./scripts/restore.sh reverses its own changes." ;;
+  esac
+  pause 'Press Enter to go back...'
+  NEXT='mainmenu'
 }
+
 
 stage_prepare() {
   title 'Step 1 of 6 - get the stick ready'

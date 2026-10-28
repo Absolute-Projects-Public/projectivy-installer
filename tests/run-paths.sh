@@ -364,14 +364,29 @@ check "dumbtv's hook is enabled instead"           "$(contains "$(cat "$TMP/stat
 check "dumbtv home takes the front"                "$(contains "$OUT" 'dumbtv home is the home screen'; echo $?)"
 echo
 
-# ---- T: the dumbtv hand-off ------------------------------------------------
-echo "Path T: handing off to dumbtv"
+# ---- T: the dumbtv hand-off, on a Fire TV ---------------------------------
+echo "Path T: handing off to dumbtv (Fire TV)"
 rm -rf "$TMP/state"; mkdir -p "$TMP/state"; seed_device
-OUT="$(printf '%b' '2\n2\n\n4\n' | timeout 60 bash "$TMP/wizard.sh" 2>/dev/null)"
+OUT="$(printf '%b' '2\n192.168.1.100\n3\n\n4\n' | timeout 60 bash "$TMP/wizard.sh" 2>/dev/null)"
 check "names the dumbtv project"                "$(contains "$OUT" 'github.com/humblemuzzu/dumbtv'; echo $?)"
+check "recognises a Fire OS device"             "$(contains "$OUT" 'a Fire OS device'; echo $?)"
 check "gives the commands to run"               "$(contains "$OUT" './scripts/all.sh'; echo $?)"
+check "offers their launcher alone"             "$(contains "$OUT" './launcher/install.sh'; echo $?)"
+check "aims their scripts at one TV"            "$(contains "$OUT" 'ANDROID_SERIAL'; echo $?)"
 check "mentions their undo path"                "$(contains "$OUT" 'restore.sh'; echo $?)"
 check "leaves the TV alone (nothing disabled)"  "$([ ! -s "$TMP/state/disabled" ]; echo $?)"
+echo
+
+# ---- W: the same hand-off on a Sony-style Android TV ----------------------
+echo "Path W: handing off to dumbtv (Android TV)"
+rm -rf "$TMP/state"; mkdir -p "$TMP/state"; seed_device
+OUT="$(MOCK_OS=androidtv printf '%b' '2\n192.168.1.100\n3\nn\n\n4\n' | MOCK_OS=androidtv timeout 60 bash "$TMP/wizard.sh" 2>/dev/null)"
+check "identifies the set as Android TV"        "$(contains "$OUT" 'Sony BRAVIA'; echo $?)"
+check "says its debloat list is Fire specific"  "$(contains "$OUT" 'written for'; echo $?)"
+check "points at the stock-launcher route"      "$(contains "$OUT" 'disabling the stock launcher'; echo $?)"
+check "still offers their launcher"             "$(contains "$OUT" './launcher/install.sh'; echo $?)"
+check "warns that Play Protect stalls installs" "$(contains "$OUT" 'Play Protect verifies adb installs'; echo $?)"
+check "does not push Projectivy on that path"   "$(not_contains "$OUT" 'Projectivy Launcher - setup'; echo $?)"
 echo
 
 printf 'passed %d, failed %d\n' "$PASS" "$FAIL"

@@ -56,8 +56,8 @@ case "$cmd" in
   version) echo "Android Debug Bridge version 1.0.41" ;;
   getprop)
     case "$*" in
-      "ro.product.model")            echo "${MOCK_MODEL:-AFTKRT}" ;;
-      "ro.build.version.name")       echo "Fire OS 8.1.8.2 (RS8182/3811)" ;;
+      "ro.product.model")            echo "${MOCK_MODEL:-${MOCK_OS:+BRAVIA 4K VH2}}${MOCK_OS:-AFTKRT}" | sed 's/^$/AFTKRT/' ;;
+      "ro.build.version.name")       [ "${MOCK_OS:-fireos}" = androidtv ] && echo "Android TV 12" || echo "Fire OS 8.1.8.2 (RS8182/3811)" ;;
       "ro.build.version.fireos")     echo "8.0" ;;
       "ro.build.version.sdk")        echo "31" ;;
       *)                             echo "" ;;
@@ -65,10 +65,13 @@ case "$cmd" in
     ;;
   shell)
     case "$*" in
-      "getprop ro.build.version.name")   echo "Fire OS 8.1.8.2 (RS8182/3811)" ;;
+      "getprop ro.build.version.name")   [ "${MOCK_OS:-fireos}" = androidtv ] && echo "Android TV 12" || echo "Fire OS 8.1.8.2 (RS8182/3811)" ;;
+      "getprop ro.product.manufacturer") [ "${MOCK_OS:-fireos}" = androidtv ] && echo "Sony" || echo "Amazon" ;;
       "getprop ro.build.version.fireos") echo "8.0" ;;
       "getprop ro.build.version.sdk")    echo "31" ;;
-      "getprop ro.product.model")        echo "${MOCK_MODEL:-AFTKRT}" ;;
+      "getprop ro.product.model")        [ "${MOCK_OS:-fireos}" = androidtv ] && echo "BRAVIA 4K VH2" || echo "${MOCK_MODEL:-AFTKRT}" ;;
+      "settings get global package_verifier_enable")
+        [ "${MOCK_OS:-fireos}" = androidtv ] && echo 1 || echo 0 ;;
       "pm list packages")
         echo "package:com.amazon.tv.launcher"
         echo "package:com.amazon.venezia"
