@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Read the on-screen list Home on Fire shows and find an entry by name, with tap coordinates.
 set -u
-S="${SER:-192.168.50.252:5555}"
+S="${SER:-192.168.1.100:5555}"
 A="adb -s $S"
 NEEDLE="${1:-dumbtv}"
 

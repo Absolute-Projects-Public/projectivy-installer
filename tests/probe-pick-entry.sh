@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Scroll the on-screen list until an entry matching NAME appears, then tap it.
 set -u
-S="${SER:-192.168.50.252:5555}"
+S="${SER:-192.168.1.100:5555}"
 A="adb -s $S"
 NAME="${1:?usage: pick-entry.sh <name>}"
 MAX="${2:-12}"

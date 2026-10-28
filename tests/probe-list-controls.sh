@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Print every visible control (text + tap coordinates) on the current screen.
 set -u
-S="${SER:-192.168.50.252:5555}"
+S="${SER:-192.168.1.100:5555}"
 A="adb -s $S"
 $A shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1
 $A shell cat /sdcard/ui.xml > /tmp/ui.xml 2>/dev/null

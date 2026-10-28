@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install Home on Fire on the TV and enable the permission its "launch on boot" needs.
 set -u
-S="${SER:-192.168.50.252:5555}"
+S="${SER:-192.168.1.100:5555}"
 A="adb -s $S"
 PKG=io.github.toolicious.homeonfire
 

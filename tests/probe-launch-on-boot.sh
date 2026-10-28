@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install Launch on Boot (F-Droid build) and show what it can actually do.
 set -u
-S="${SER:-192.168.50.252:5555}"
+S="${SER:-192.168.1.100:5555}"
 A="adb -s $S"
 PKG=news.androidtv.launchonboot
 URL=https://f-droid.org/repo/news.androidtv.launchonboot_12.apk
