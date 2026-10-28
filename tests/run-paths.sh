@@ -7,7 +7,8 @@
 # Each path is driven with piped menu answers (1, 2, 3 ... then blank lines for "press Enter" prompts).
 # Exit status is 0 only when every assertion passes.
 
-set -uo pipefail
+set -u
+export FT_SKIP_DOWNLOAD=1   # never hit the network in testso pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 WIZ="$HERE/../Install-Projectivy.sh"
@@ -305,6 +306,20 @@ check "finishes"                                "$(contains "$OUT" 'Cleanup fini
 echo
 
 # ---- P: Fire OS 8 hides the app folder -> media fallback + manual step ----
+# ---- V: come back to the launcher after a reboot (both mechanisms) ---------
+# full cleanup, then the closing menu -> make it come back -> install both
+echo "Path V: keep the launcher across a reboot"
+SEED_EMPTY=0
+run_path "1\n1\n\n1\n192.168.1.100\ny\ny\n1\n1\nn\n\n1\n\n2\n1\n\n1\n1\n"
+echo "Path V: keep the launcher across a reboot"
+check "offers the reboot-proof step"        "$(contains "$OUT" 'Make it come back to my launcher'; echo $?)"
+check "runs the Home on Fire stage"         "$(contains "$OUT" 'The fallback - Home on Fire'; echo $?)"
+check "installs Home on Fire"               "$(contains "$OUT" 'WRITE_SECURE_SETTINGS granted'; echo $?)"
+check "arms the guard"                      "$(contains "$OUT" 'Home on Fire is armed'; echo $?)"
+check "installs the spare from F-Droid"     "$(contains "$OUT" 'boot receiver present and permitted'; echo $?)"
+check "says the spare does not fire here"   "$(contains "$OUT" 'blocks a background app from starting another app at boot'; echo $?)"
+check "tells the user to pick the target"   "$(contains "$OUT" 'Choose target app'; echo $?)"
+
 echo "Path P: Fire OS 8 hides the app directory, so the media fallback is used"
 SEED_EMPTY=0; export MOCK_APP_DIR=hidden
 run_path "1\n1\n\n1\n192.168.1.100\ny\ny\n1\n1\nn\n\n1\n\n1\n"

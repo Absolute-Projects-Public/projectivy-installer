@@ -31,6 +31,12 @@ PROJ_SVC='com.spocky.projengmenu/com.spocky.projengmenu.services.ProjectivyAcces
 PROJ_APK_URL='https://github.com/spocky/miproja1/releases/download/4.71/ProjectivyLauncher-4.71-c95-xda-release.apk'
 HOF_PKG='io.github.toolicious.homeonfire'
 HOF_APK_URL='https://github.com/toolicious/home-on-fire/releases/latest/download/home-on-fire.apk'
+HOF_SVC="$HOF_PKG/.HijackService"
+# Second mechanism, from F-Droid (open source, MIT, built and signed by F-Droid). Its boot receiver
+# is measured as blocked on Fire OS 8 - see the notes in stage_keepboot - so it is a spare, not the
+# primary. Kept because it may work on other builds and costs nothing to have.
+LOB_PKG='news.androidtv.launchonboot'
+LOB_APK_URL='https://f-droid.org/repo/news.androidtv.launchonboot_12.apk'
 ADGUARD_DOT='dns.adguard-dns.com'
 CLOUDFLARE_DOT='1dot1dot1dot1.cloudflare-dns.com'
 
@@ -913,19 +919,37 @@ Press the HOME button on the remote so the launcher comes to the front, then che
   esac
 }
 
+launcher_name() {  # what to call the chosen launcher in instructions
+  case "${WIZ_LAUNCHER:-proj}" in
+    dumbtv)  printf 'dumbtv' ;;
+    amazon)  printf "Amazon's home" ;;
+    *)       printf 'Projectivy Launcher' ;;
+  esac
+}
+
 stage_fallback() {
   title 'The fallback - Home on Fire'
-  body "The check did not pass, which happens on newer Fire OS builds. 'Home on Fire' redirects the Home
-button instead of overriding the launcher, and works where the override does not."
-  choose 'Install Home on Fire?' 'Yes, install it now' 'No, go back and check again' 'Exit Setup'
+  body "The check did not pass, which is normal on Fire OS 8: the Home button is held by Amazon's launcher
+(declared at priority 950) and the old tricks no longer move it.
+
+Home on Fire redirects the Home button instead: it watches for Amazon's home screen appearing and
+puts your launcher back on top. On Fire OS 8 that is the only thing that works, and it also brings
+your launcher back after a reboot or waking from standby."
+
+  choose 'Install the fallbacks?' \
+    'Yes - install both Home on Fire and Launch on Boot' \
+    'Only Home on Fire' \
+    'No, go back and check again'
   case "$MENU_RESULT" in
-    'Yes, install it now') ;;
-    'No, go back and check again') NEXT='verify'; return ;;
-    *) NEXT='exit'; return ;;
+    'Yes - install both'*)      WANT_LOB=1 ;;
+    'Only Home on Fire')        WANT_LOB=0 ;;
+    *)                          NEXT='verify'; return ;;
   esac
 
   title 'Downloading Home on Fire'
-  if ! curl -fL --progress-bar "$HOF_APK_URL" -o /tmp/home-on-fire.apk; then
+  if [ "${FT_SKIP_DOWNLOAD:-0}" = 1 ]; then
+    : > /tmp/home-on-fire.apk
+  elif ! curl -fL --progress-bar "$HOF_APK_URL" -o /tmp/home-on-fire.apk; then
     bad 'Download failed.'; NEXT='fallback'; return
   fi
   "$ADB" ${IP:+-s "${IP}:5555"} install -r /tmp/home-on-fire.apk || warn 'Install reported an error - check the TV screen.'
@@ -935,17 +959,49 @@ button instead of overriding the launcher, and works where the override does not
     *'WRITE_SECURE_SETTINGS: granted=true'*) ok 'WRITE_SECURE_SETTINGS granted' ;;
     *) warn 'permission grant not confirmed - the accessibility switch in the app may refuse' ;;
   esac
+
+  if [ "${WANT_LOB:-0}" = 1 ]; then
+    title 'Downloading Launch on Boot (the spare)'
+    if [ "${FT_SKIP_DOWNLOAD:-0}" = 1 ]; then
+      : > /tmp/launch-on-boot.apk
+    elif ! curl -fL --progress-bar "$LOB_APK_URL" -o /tmp/launch-on-boot.apk; then
+      warn 'Could not fetch it - carrying on with Home on Fire only.'
+      WANT_LOB=0
+    fi
+    if [ "${WANT_LOB:-0}" = 1 ]; then
+      "$ADB" ${IP:+-s "${IP}:5555"} install -r /tmp/launch-on-boot.apk || warn 'Install reported an error.'
+      case "$(adb_sh dumpsys package "$LOB_PKG" | tr -d '\r')" in
+        *RECEIVE_BOOT_COMPLETED:granted=true*|*'RECEIVE_BOOT_COMPLETED: granted=true'*) ok 'boot receiver present and permitted' ;;
+        *) warn 'could not confirm its boot receiver' ;;
+      esac
+      dim 'Measured on Fire OS 8.1.8.5: it installs and its boot receiver is registered, but Android'
+      dim 'blocks a background app from starting another app at boot, so it does not bring your'
+      dim 'launcher up on this firmware. Left installed as the spare mechanism.'
+    fi
+  fi
+
+  # One guard only. Two armed guards fight and the loser usually wins.
+  a11y_remove_pkg "$PROJ_PKG"
+  a11y_remove_pkg "$DUMBTV_PKG"
+  a11y_add "$HOF_SVC"
+  case "$(adb_sh settings get secure enabled_accessibility_services | tr -d '\r')" in
+    *"$HOF_PKG"*) ok 'Home on Fire is armed' ;;
+    *) warn 'could not arm it from here - flip the Accessibility service switch inside the app' ;;
+  esac
   adb_do am start -n "$HOF_PKG/.MainActivity"
-  log_event 'HOF' 'home on fire installed, permission granted, app opened on the TV'
+  log_event 'HOF' 'home on fire installed, granted, armed and opened on the TV'
 
   title 'Finish this on the TV'
-  body "  1. Turn the 'Accessibility service' switch ON.
-  2. Choose target app > Projectivy Launcher.
-  3. Turn on 'Launch on boot' / 'launch when device wakes up'.
+  body "In the app that just opened:
 
-Then in Projectivy: Settings > General > 'Override current launcher' = OFF.
-Only one of the two should be active - they fight each other if both are on."
-  pause 'Press Enter once that is done...'
+  1. 'Choose target app...' and pick $(launcher_name).
+  2. Turn ON 'Accessibility service'.
+  3. Turn ON 'Replace Home button'.
+  4. Turn ON 'Launch on boot' (this is what survives power off, restart and standby).
+  5. Leave the two 'Escape to Amazon home' options on, so you can still reach Amazon's home.
+
+Leave Projectivy's 'Override current launcher' OFF - that is the switch that fights this."
+  pause 'Press Enter once the TV shows your launcher and the switches are on...'
   NEXT='verify'
 }
 
@@ -1063,10 +1119,12 @@ to its ad-filled home screen. If that happens, just run this wizard again - the 
 so it is a 30-second job, not a reinstall."
   choose 'Anything else?' \
     'Close (all done)' \
+    'Make it come back to my launcher after a reboot or standby' \
     'Undo / restore the Amazon home screen and clear DNS'
   case "$MENU_RESULT" in
-    'Undo / restore'*) NEXT='undo' ;;
-    *) NEXT='exit' ;;
+    'Make it come back'*) NEXT='fallback' ;;
+    'Undo / restore'*)    NEXT='undo' ;;
+    *)                    NEXT='exit' ;;
   esac
 }
 

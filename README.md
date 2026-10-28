@@ -119,6 +119,25 @@ short instead of counting down.
 
 Typing the address by hand skips all of that, and is the quickest route when you already know it.
 
+### Coming back to your launcher after a reboot or standby
+
+Amazon's launcher declares itself the home screen at priority 950, and Fire OS 8 ignores the old
+`set-home-activity` command, so the Home button stays Amazon's no matter what you install. Two
+separate things are needed, and the wizard offers both from the closing menu ("Make it come back to
+my launcher after a reboot or standby"):
+
+- **Home on Fire** (primary). It watches for Amazon's home screen appearing and puts your launcher
+  back on top, and it relaunches your launcher after a boot and after waking from standby. Its three
+  switches (Accessibility service, Replace Home button, Launch on boot) are what makes it work.
+- **Launch on Boot** (spare, installed from F-Droid). A plain boot receiver. Measured on Fire OS
+  8.1.8.5: it installs, its boot receiver is registered and permitted, but Android blocks a
+  background app from starting another app at boot, so on this firmware it never brings the launcher
+  up. It is kept as a second mechanism for builds where it does work.
+
+Verified on a Fire TV Stick 4K Max (2nd gen, Fire OS 8.1.8.5): cold boot, warm reboot and wake from
+standby all land on the chosen launcher once Home on Fire is armed. Projectivy's own "Override
+current launcher" switch must be OFF while Home on Fire is in use, or the two fight each other.
+
 ## What the full cleanup asks
 
 Six questions, every default is the safe one:

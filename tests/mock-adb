@@ -172,6 +172,10 @@ case "$cmd" in
         echo "  versionCode=$v minSdk=25 targetSdk=33"
         echo "  userId=$(( $(printf '%s' "$p" | cksum | cut -d' ' -f1) % 10000 + 10000 ))"
         case " ${MOCK_SYSTEM_OFF:-com.android.nfc} " in *" $p "*) echo "  User 0: enabled=2" ;; *) echo "  User 0: enabled=0" ;; esac
+        case "$p" in
+          io.github.toolicious.homeonfire)   echo "      android.permission.WRITE_SECURE_SETTINGS: granted=true" ;;
+          news.androidtv.launchonboot)       echo "      android.permission.RECEIVE_BOOT_COMPLETED: granted=true" ;;
+        esac
         echo "  flags=[ ]"
         ;;
       "dumpsys deviceidle "*) echo "Added: ${@: -1}" ;;

@@ -828,9 +828,11 @@ clean_done() {
   body "Your TV now has no ad rows, no tracking packages running, and no path to Amazon's telemetry."
   choose 'Anything else?' \
     'Close (all done)' \
+    'Make it come back to my launcher after a reboot or standby' \
     'Undo everything now' \
     'Run the checks again'
   case "$MENU_RESULT" in
+    'Make it come back'*) NEXT='fallback' ;;
     'Undo everything'*) NEXT='clean_undo' ;;
     'Run the checks again'*) NEXT='clean_verify' ;;
     *) NEXT='exit' ;;
