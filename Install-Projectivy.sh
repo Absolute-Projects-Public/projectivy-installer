@@ -715,7 +715,7 @@ install_projectivy_adb() {
     rm -f "$apk"; return 1
   fi
   log_event 'INSTALL' 'APK downloaded, running adb install -r'
-  "$ADB" install -r "$apk" || warn 'Install reported an error - check the TV screen.'
+  "$ADB" ${IP:+-s "${IP}:5555"} install -r "$apk" || warn 'Install reported an error - check the TV screen.'
   rm -f "$apk"
   # No pipe into grep -q: under pipefail, grep exits on the first match and printf gets EPIPE,
   # which makes the whole pipeline look like a failure. It only bites sometimes, which is worse.
@@ -928,7 +928,7 @@ button instead of overriding the launcher, and works where the override does not
   if ! curl -fL --progress-bar "$HOF_APK_URL" -o /tmp/home-on-fire.apk; then
     bad 'Download failed.'; NEXT='fallback'; return
   fi
-  "$ADB" install -r /tmp/home-on-fire.apk || warn 'Install reported an error - check the TV screen.'
+  "$ADB" ${IP:+-s "${IP}:5555"} install -r /tmp/home-on-fire.apk || warn 'Install reported an error - check the TV screen.'
   adb_do pm grant "$HOF_PKG" android.permission.WRITE_SECURE_SETTINGS
   local hof; hof=$(adb_sh dumpsys package "$HOF_PKG")
   case "$hof" in
@@ -1083,7 +1083,7 @@ stage_undo() {
   fi
   title "Restoring the Amazon home screen on $IP"
   timeout 20 "$ADB" connect "${IP}:5555" >/dev/null 2>&1 || true
-  a11y_remove "$PROJ_SVC"
+  a11y_remove_pkg "$PROJ_PKG"
   adb_do appops set "$PROJ_PKG" SYSTEM_ALERT_WINDOW default
   adb_do dumpsys deviceidle whitelist "-$PROJ_PKG"
   adb_do am start -n com.amazon.tv.launcher/.ui.HomeActivity_vNext

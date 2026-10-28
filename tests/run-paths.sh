@@ -341,10 +341,10 @@ echo
 echo "Path S: choosing dumbtv home disarms Projectivy's Home hook"
 rm -rf "$TMP/state"; mkdir -p "$TMP/state"; seed_device
 touch "$TMP/state/proj"
-printf '%s' "com.spocky.projengmenu/com.spocky.projengmenu.services.ProjectivyAccessibilityService" > "$TMP/state/a11y"
+printf '%s' "com.spocky.projengmenu/.services.ProjectivyAccessibilityService" > "$TMP/state/a11y"
 OUT="$(printf '%b' '1\n1\n\n1\n192.168.1.100\ny\ny\n2\n4\nn\n\n1\n1\n' | timeout 120 bash "$TMP/wizard.sh" 2>/dev/null)"
 check "says the other launcher was switched off"   "$(contains "$OUT" 'other launcher'; echo $?)"
-check "Projectivy's hook is gone from accessibility" "$(not_contains "$(cat "$TMP/state/a11y" 2>/dev/null)" 'projengmenu'; echo $?)"
+check "Projectivy's hook is gone (short-form name too)" "$(not_contains "$(cat "$TMP/state/a11y" 2>/dev/null)" 'projengmenu'; echo $?)"
 check "dumbtv's hook is enabled instead"           "$(contains "$(cat "$TMP/state/a11y" 2>/dev/null)" 'tv.dumbtv.home.Guard'; echo $?)"
 check "dumbtv home takes the front"                "$(contains "$OUT" 'dumbtv home is the home screen'; echo $?)"
 echo

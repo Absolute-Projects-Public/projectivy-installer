@@ -60,6 +60,10 @@ backup_available() {
 
 dnsf_signer() { sed 's/#.*//' "$DATA_DIR/personaldnsfilter-signer.txt" | awk 'NF {print; exit}'; }
 
+dsel() {  # the device selector for direct adb calls; empty when we do not know the address
+  [ -n "${IP:-}" ] && printf -- '-s %s:5555' "$IP"
+}
+
 data_list() {  # data_list <file-in-data/>  -> first field of every non-comment line
   local f="$DATA_DIR/$1"
   [ -f "$f" ] || return 0
@@ -413,20 +417,27 @@ a11y_add() {  # keep every other service, add ours
   adb_do settings put secure enabled_accessibility_services "$cur"
 }
 
-a11y_remove() {  # remove only <component>, leaving every other service the user has
-  local comp="$1" cur parts out='' p
+a11y_remove_pkg() {  # take out every accessibility component belonging to <package>
+  # Match on the package, not the whole component: Android writes the same service either way -
+  # "pkg/.Service" or "pkg/pkg.Service" - and a monitor found it stored in the short form, which an
+  # exact-string match silently fails to remove. That left two launcher guards fighting over HOME.
+  local pkg="$1" cur parts out='' p
   cur=$(adb_sh settings get secure enabled_accessibility_services | tr -d '\r')
   case "$cur" in ''|null) return 0 ;; esac
   IFS=':' read -r -a parts <<< "$cur"
   for p in "${parts[@]}"; do
-    [ "$p" = "$comp" ] && continue
+    case "$p" in ''|"$pkg"/*) continue ;; esac
     out="${out:+$out:}$p"
   done
+  if [ "$out" = "$cur" ]; then
+    return 0                      # nothing of ours was in there
+  fi
   if [ -z "$out" ]; then
     adb_do settings put secure enabled_accessibility_services '""'
   else
     adb_do settings put secure enabled_accessibility_services "$out"
   fi
+  log_event 'A11Y' "removed $pkg's component from the accessibility list"
 }
 
 try_set_home() {  # try_set_home <pkg>/<activity> <package>  -> 0 if it actually came to the front
@@ -445,8 +456,8 @@ clean_launcher() {
   # its accessibility service fights the one we are about to arm, and the user ends up with the
   # wrong home screen. Remove every guard we know how to remove first, then arm the chosen one.
   local other=''
-  a11y_remove "$PROJ_SVC"
-  a11y_remove "$DUMBTV_SVC"
+  a11y_remove_pkg "$PROJ_PKG"
+  a11y_remove_pkg "$DUMBTV_PKG"
   case "$WIZ_LAUNCHER" in
     *dumbtv*) other="$PROJ_PKG" ;;
     *)        other="$DUMBTV_PKG" ;;
@@ -491,7 +502,7 @@ clean_launcher() {
       else
         local tmp; tmp="$(mktemp -d)"
         if fetch_verify "$DUMBTV_URL" "$DUMBTV_SHA256" "$tmp/$DUMBTV_PKG.apk"; then
-          local out; out=$("$ADB" install -r "$tmp/$DUMBTV_PKG.apk" 2>&1 </dev/null | tail -1)
+          local out; out=$("$ADB" $(dsel) install -r "$tmp/$DUMBTV_PKG.apk" 2>&1 </dev/null | tail -1)
           if ! present_pkg "$DUMBTV_PKG"; then
             warn "dumbtv home did not install: $out"
             NEXT='clean_smarttube'; rm -rf "$tmp"; return
@@ -509,9 +520,16 @@ clean_launcher() {
       if try_set_home "$DUMBTV_HOME" "$DUMBTV_PKG"; then
         ok 'dumbtv home is the home screen'
       else
-        warn 'Amazon still owns the Home button on this build.'
-        dim 'dumbtv home needs its guard to bind: open it once from the TV apps row, then press Home.'
-        pause 'Press Enter once dumbtv home has opened on the TV...'
+        warn 'Amazon keeps the Home button on this build.'
+        if [ "${SDK_INT:-0}" -ge 30 ]; then
+          dim 'Measured on Fire OS 8.1.8.5: dumbtv home installs and its guard binds, but the Home'
+          dim 'button still resolves to Amazons launcher (theirs is declared at priority 950). Their'
+          dim 'own device table calls this model "partial" for the same reason.'
+          dim 'Projectivy can take HOME here, through its own "Override current launcher" switch.'
+        else
+          dim 'Open dumbtv home once from the TV apps row, then press Home.'
+        fi
+        pause 'Press Enter to carry on...'
       fi ;;
   esac
   NEXT='clean_smarttube'
@@ -542,7 +560,7 @@ brings it straight back."
   fi
   code=0
   for attempt in 1 2; do
-    out=$("$ADB" install -r "$tmp/$SMARTTUBE_PKG.apk" 2>&1 </dev/null | tail -1)
+    out=$("$ADB" $(dsel) install -r "$tmp/$SMARTTUBE_PKG.apk" 2>&1 </dev/null | tail -1)
     sleep 1
     code=$(pkg_version "$SMARTTUBE_PKG"); code="${code:-0}"
     [ "$code" -ge "$SMARTTUBE_VERSION_CODE" ] && break
@@ -648,7 +666,7 @@ stops being able to reach Amazon's telemetry and update servers, and everything 
       warn 'Could not download the filter - DNS left as it was.'
       rm -rf "$tmp"; NEXT='clean_verify'; return
     fi
-    local out; out=$("$ADB" install -r "$tmp/$DNSF_PKG.apk" 2>&1 </dev/null | tail -1)
+    local out; out=$("$ADB" $(dsel) install -r "$tmp/$DNSF_PKG.apk" 2>&1 </dev/null | tail -1)
     have=$(pkg_version "$DNSF_PKG")
     if [ "$have" != "$DNSF_VERSION" ]; then
       warn "The filter did not install: $out"
@@ -718,7 +736,7 @@ stops being able to reach Amazon's telemetry and update servers, and everything 
     # Android 9 and 10: the app folder is still writable by adb.
     mkdir -p "$tmp/push"
     cp "$tmp/blocklist.txt" "$tmp/push/FILTERHOSTS.TXT"
-    if "$ADB" push "$tmp/push/FILTERHOSTS.TXT" "$appdir/FILTERHOSTS.TXT" >/dev/null 2>&1 </dev/null; then
+    if "$ADB" $(dsel) push "$tmp/push/FILTERHOSTS.TXT" "$appdir/FILTERHOSTS.TXT" >/dev/null 2>&1 </dev/null; then
       placed='app'
     fi
   fi
@@ -727,7 +745,7 @@ stops being able to reach Amazon's telemetry and update servers, and everything 
     # Always leave the list somewhere adb can write, so the manual route is possible.
     adb_do mkdir -p "$mediadir"
     cp "$tmp/blocklist.txt" "$tmp/blocklist-media.txt"
-    if "$ADB" push "$tmp/blocklist-media.txt" "$mediadir/blocklist.txt" >/dev/null 2>&1 </dev/null; then
+    if "$ADB" $(dsel) push "$tmp/blocklist-media.txt" "$mediadir/blocklist.txt" >/dev/null 2>&1 </dev/null; then
       [ "$placed" = 'none' ] && placed='media'
     fi
   fi
@@ -897,8 +915,8 @@ clean_undo() {
 
   # launcher hooks and DNS: clear whether or not there was a log. Only our own service comes out -
   # wiping the whole list would also disable a screen reader someone might be using.
-  a11y_remove "$PROJ_SVC"
-  a11y_remove "$DUMBTV_SVC"
+  a11y_remove_pkg "$PROJ_PKG"
+  a11y_remove_pkg "$DUMBTV_PKG"
   adb_do cmd package set-home-activity com.amazon.tv.launcher/.ui.HomeActivity_vNext
   adb_do am start -n com.amazon.tv.launcher/.ui.HomeActivity_vNext
   adb_do settings delete secure always_on_vpn_app

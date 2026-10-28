@@ -55,13 +55,15 @@ appdata_restore_count() {
 # restore_app_data ARCHIVE -> 0 when Android reports the restore actually completed
 restore_app_data() {
   local ab="$1" pid i done0 took0 fail0 asked=0
+  local IPSEL=''
+  [ -n "${IP:-}" ] && IPSEL="-s ${IP}:5555"
   done0=$(appdata_restore_count 'adb restore processing complete')
   took0=$(appdata_restore_count 'taking data')
   fail0=$(appdata_restore_count 'ErrnoException|timed out waiting for user confirmation')
 
   # A dialog left over from an earlier, timed-out request would take the taps meant for this one.
   adb_do am force-stop com.android.backupconfirm
-  "$ADB" restore "$ab" >/dev/null 2>&1 </dev/null &
+  "$ADB" ${IPSEL:+$IPSEL} restore "$ab" >/dev/null 2>&1 </dev/null &
   pid=$!
 
   for i in $(seq 1 40); do

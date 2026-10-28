@@ -507,10 +507,14 @@ function Add-A11y {
 }
 
 function Remove-A11y {
-    param([string]$Component)
+    # Take out every component belonging to a package. Android stores the same service as either
+    # "pkg/.Service" or "pkg/pkg.Service", so matching on the package is the only reliable way -
+    # an exact-string match left two launcher guards fighting over HOME.
+    param([string]$Pkg)
     $cur = (Invoke-AdbShell 'settings' 'get' 'secure' 'enabled_accessibility_services').Trim()
     if ([string]::IsNullOrWhiteSpace($cur) -or $cur -eq 'null') { return }
-    $keep = @($cur -split ':' | Where-Object { $_ -and $_ -ne $Component })
+    $keep = @($cur -split ':' | Where-Object { $_ -and $_ -notlike "$Pkg/*" })
+    if ($keep.Count -eq ($cur -split ':' | Where-Object { $_ }).Count) { return }
     if ($keep.Count -eq 0) {
         [void](Invoke-AdbShell 'settings' 'put' 'secure' 'enabled_accessibility_services' '""')
     } else {
@@ -540,8 +544,8 @@ function Try-SetHome {
 function Install-Launcher {
     # Only one launcher guard may be active: another launcher's service fights ours and the user
     # ends up with the wrong home screen. Remove every guard we know, then arm the chosen one.
-    Remove-A11y $PROJ_SVC
-    Remove-A11y $DUMBTV_SVC
+    Remove-A11y $PROJ_PKG
+    Remove-A11y $DUMBTV_PKG
     $other = if ($script:Launcher -eq 'dumbtv') { $PROJ_PKG } else { $DUMBTV_PKG }
     if (Test-Pkg $other) {
         [void](Invoke-AdbShell 'am' 'force-stop' $other)
@@ -859,8 +863,8 @@ function Invoke-Undo {
         Warn2 'No cleanup log found - only clearing the launcher hooks and DNS.'
     }
 
-    Remove-A11y $PROJ_SVC
-    Remove-A11y $DUMBTV_SVC
+    Remove-A11y $PROJ_PKG
+    Remove-A11y $DUMBTV_PKG
     [void](Invoke-AdbShell 'cmd' 'package' 'set-home-activity' 'com.amazon.tv.launcher/.ui.HomeActivity_vNext')
     [void](Invoke-AdbShell 'am' 'start' '-n' 'com.amazon.tv.launcher/.ui.HomeActivity_vNext')
     [void](Invoke-AdbShell 'settings' 'delete' 'secure' 'always_on_vpn_app')
