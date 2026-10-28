@@ -160,6 +160,13 @@ ANDROID_SERIAL=<tv-ip>:5555 ./launcher/install.sh     # launcher only
 ANDROID_SERIAL=<tv-ip>:5555 ./scripts/all.sh          # full pass, reboots twice
 ```
 
+Run their read-only pass before deciding anything on an Android TV. On the BRAVIA 4K UR3 it reported
+`platform: NOT Amazon hardware` and `discover: candidates 0 of 216 packages` - a clean Sony set has
+nothing their Amazon package list should touch, and their DNS filter blocks Amazon telemetry, not
+Sony's. On a set like that the launcher and the SmartTube step are the real value; their full pass is
+mostly no-ops plus risk. SmartTube itself installs cleanly there (`./scripts/youtube.sh -y --force`,
+version 32.56, checksum verified) and their script puts it first in dumbtv home's app order.
+
 Two things found on a Sony BRAVIA 4K UR3 (Android 10) that will waste an evening otherwise:
 
 - **Google Play Protect stalls sideloads.** With `package_verifier_enable=1` the TV shows a "blocked"
