@@ -217,7 +217,11 @@ choose() {
 
 adb_sh() {
   log_event 'ADB-REQ' "shell $*"
-  local out
+  local out sel=()
+  # Always name the device: a scan can leave another host connected, and plain `adb shell` then
+  # fails with "more than one device". ${sel[@]+...} keeps bash 3.2 (macOS) happy.
+  [ -n "${IP:-}" ] && sel=(-s "${IP}:5555")
+  out="$("$ADB" ${sel[@]+"${sel[@]}"} shell "$@" 2>&1 </dev/null | tr -d '\r' || true)"
   # </dev/null matters: adb would otherwise eat the stdin of a `while read` loop that calls us,
   # which silently stopped after the first iteration.
   out="$("$ADB" shell "$@" 2>&1 </dev/null | tr -d '\r' || true)"
@@ -227,7 +231,23 @@ adb_sh() {
 
 adb_do() {
   log_event 'ADB-REQ' "shell $*"
-  "$ADB" shell "$@" </dev/null >/dev/null 2>&1 || true
+  local sel=()
+  [ -n "${IP:-}" ] && sel=(-s "${IP}:5555")
+  "$ADB" ${sel[@]+"${sel[@]}"} shell "$@" </dev/null >/dev/null 2>&1 || true
+}
+
+# identify_device <ip> -> "AFTKRT - Fire TV Stick 4K Max", "10.2.0.1 is not a Fire TV", or ""
+identify_device() {
+  local ip="$1" model=''
+  [ -n "$ADB" ] || ADB="$(resolve_adb 2>/dev/null)" || true
+  [ -n "$ADB" ] || return 1''
+  timeout 8 "$ADB" connect "${ip}:5555" >/dev/null 2>&1 || true
+  model=$("$ADB" -s "${ip}:5555" shell getprop ro.product.model 2>/dev/null </dev/null | tr -d '\r' | tail -1)
+  [ -n "$model" ] || return 1
+  case "$model" in
+    AFT*|*Fire*) printf '%s' "$model" ;;
+    *)           printf 'not-a-fire-tv:%s' "$model" ;;
+  esac
 }
 
 # ---------------------------------------------------------------- adb
@@ -292,26 +312,74 @@ local_ip() {
   ip route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") {print $(i+1); exit}}'
 }
 
+# Every plausible home-network subnet, with VPN and virtual interfaces left out. A VPN takes the
+# default route, so `ip route get` happily reports the VPN address - that is how a scan ends up
+# sweeping 10.2.0.0/24 and offering the VPN gateway as "a device on port 5555".
+lan_subnets() {
+  local ifc base
+  if command -v ip >/dev/null 2>&1; then
+    ip -4 -o addr show scope global 2>/dev/null | awk '{print $2, $4}' | while read -r ifc cidr; do
+      case "$ifc" in
+        tun*|tap*|wg*|ppp*|pptp*|docker*|veth*|virbr*|br-*|zt*|utun*|nordlynx*|proton*|mullvad*|tailscale*|ipsec*|gre*|sit*|lxc*|lxd*|vmnet*|vboxnet*|anbox*|waydroid*) continue ;;
+      esac
+      base="${cidr%.*}"
+      case "$base" in 127.0.0.1|169.254.*) continue ;; esac
+      printf '%s %s\n' "$ifc" "$base"
+    done
+  else
+    # macOS and anything else without `ip`: ask the routing table for the physical interface.
+    ifc=$(route -n get default 2>/dev/null | awk '/interface:/{print $2}')
+    case "$ifc" in tun*|utun*|ppp*|ipsec*) ifc='' ;; esac
+    [ -n "$ifc" ] || return 0
+    base=$(ipconfig getifaddr "$ifc" 2>/dev/null)
+    [ -n "$base" ] && printf '%s %s\n' "$ifc" "${base%.*}"
+  fi
+}
+
+vpn_interface() {
+  command -v ip >/dev/null 2>&1 || return 1
+  ip -4 -o addr show scope global 2>/dev/null | awk '{print $2}' |
+    grep -qE '^(tun|tap|wg|ppp|pptp|utun|nordlynx|proton|mullvad|tailscale|ipsec)' 2>/dev/null
+}
+
 scan_network() {
-  local base ip found_file
-  ip="$(local_ip)"
-  [ -n "$ip" ] || ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
-  [ -n "$ip" ] || return 1
-  base="${ip%.*}."
-  title "Scanning ${base}1-254 for a device listening on port 5555 (a few seconds)"
-  log_event 'SCAN' "sweeping ${base}1-254 on port 5555"
+  local found_file subnets ifc base n label
+  local subnets=()
+  while IFS= read -r label; do subnets+=("$label"); done < <(lan_subnets 2>/dev/null)
+  if [ "${#subnets[@]}" -eq 0 ]; then
+    base=$(local_ip)
+    [ -n "$base" ] || base=$(hostname -I 2>/dev/null | awk '{print $1}')
+    [ -n "$base" ] || return 1
+    subnets=("? ${base%.*}")
+  fi
+
   found_file="$(mktemp)"
-  for n in $(seq 1 254); do
-    ( port_open "${base}${n}" 5555 0.6 && echo "$base$n" >>"$found_file" ) &
+  local scanned=0
+  for ifc in ${subnets[@]+"${subnets[@]}"}; do
+    base="${ifc##* }"
+    [ -n "$base" ] || continue
+    scanned=$((scanned+1))
+    log_event 'SCAN' "sweeping ${base}1-254 on port 5555"
+    for n in $(seq 1 254); do
+      ( port_open "${base}.${n}" 5555 0.6 && echo "${base}.${n}" >>"$found_file" ) &
+    done
+    wait
   done
-  wait
   SCAN_RESULTS="$(sort -u "$found_file" | tr '\n' ' ')"
   rm -f "$found_file"
+  title "Scanned $scanned subnet(s) for a device listening on port 5555"
   log_event 'SCAN' "found: ${SCAN_RESULTS:-none}"
+  if [ -z "${SCAN_RESULTS// /}" ] && vpn_interface; then
+    warn "Nothing found, and this computer is on a VPN. The TV is on your home network, so turn the
+VPN off for a minute - a VPN takes the default route and can hide the whole LAN."
+  fi
   return 0
 }
 
 stage_scan() {
+  # Naming each device needs adb, and one route into this stage (the install menu) has not
+  # resolved it yet.
+  ensure_adb_stage || true
   if ! scan_network; then
     bad 'Could not work out this computer'"'"'s own network address. Enter the IP by hand.'
     NEXT='menu_ip'; return
@@ -329,16 +397,30 @@ stage_scan() {
   fi
 
   ok "found ${#found[@]} device(s)"
-  local labels=()
-  local f
-  for f in "${found[@]}"; do labels+=("Select $f from scan result"); done
+  local labels=() f label model
+  for f in "${found[@]}"; do
+    model=$(identify_device "$f")
+    case "$model" in
+      '')               label="nothing answered"; continue ;;
+      not-a-fire-tv:*)  log_event 'SCAN' "$f is ${model#not-a-fire-tv:}, not a Fire TV"; continue ;;
+      *)                label="$model" ;;
+    esac
+    label="${label##*  }"
+    labels+=("Select $f from scan result - $label")
+  done
+  if [ "${#labels[@]}" -eq 0 ]; then
+    warn 'None of the devices answering on port 5555 look like a Fire TV.'
+    vpn_interface && dim 'Your computer is on a VPN; the TV is on the home network.'
+    pause 'Press Enter to choose another way to connect...'
+    NEXT='menu_connect'; return
+  fi
   labels+=("Rescan the network")
   labels+=("Enter the IP manually")
 
   choose 'Which one is the Firestick?' "${labels[@]}"
   case "$MENU_RESULT" in
-    "Select "*" from scan result")
-      IP="${MENU_RESULT#Select }"; IP="${IP% from scan result}"
+    'Select '*)
+      IP="${MENU_RESULT#Select }"; IP="${IP%% *}"
       # if we still don't know how Projectivy is meant to get there, ask now - don't skip past it
       if [ -z "$INSTALL_MODE" ]; then NEXT='install_after_scan'; else NEXT='connect'; fi ;;
     "Rescan the network") NEXT='scan' ;;
@@ -364,15 +446,70 @@ WHAT YOU NEED
 
 stage_mainmenu() {
   choose 'What would you like to do?' \
-    'Full cleanup - remove the ads and tracking, replace the home screen, block Amazon (recommended)' \
-    'Home screen only - just the launcher, quicker' \
+    'This tool - remove the ads and tracking, pick a home screen, block Amazon (recommended)' \
+    "dumbtv's tool - hand off to the project this one learned from" \
     'Undo everything - put the TV back how it was' \
     'Exit Setup'
   case "$MENU_RESULT" in
-    'Full cleanup'*)  MODE='full'; NEXT='prepare' ;;
-    'Home screen only'*) MODE='home'; NEXT='prepare' ;;
+    'This tool'*)
+      choose 'How much should it do?' \
+        'Full cleanup - everything (recommended)' \
+        'Home screen only - just the launcher, quicker'
+      case "$MENU_RESULT" in
+        'Home screen only'*) MODE='home' ;;
+        *)                   MODE='full' ;;
+      esac
+      NEXT='prepare' ;;
+    "dumbtv's tool"*) NEXT='dumbtv' ;;
     'Undo everything'*) NEXT='clean_undo' ;;
     *) NEXT='exit' ;;
+  esac
+}
+
+stage_dumbtv() {
+  title "dumbtv's own tool"
+  body "dumbtv (github.com/humblemuzzu/dumbtv) is the project this one learned the cleanup from. Its
+scripts are the reference implementation, tested by owners of about twenty TVs and sticks, and its
+device catalogue is worth reading before you start.
+
+Two honest differences: it expects a shell rather than a click-through wizard, and its on-device DNS
+filter still needs the same manual step on Fire OS 8. What it has that this tool does not is breadth
+of device coverage.
+
+The commands are:
+
+  git clone https://github.com/humblemuzzu/dumbtv
+  cd dumbtv
+  ./scripts/all.sh
+
+Run them in a terminal. It asks its own questions - Prime Video, Alexa, the home screen, the DNS
+filter, apps to remove, SmartTube - and every change is reversible with ./scripts/restore.sh."
+  choose 'What next?' \
+    'Download dumbtv for me, then I will run it' \
+    'Just leave me the instructions' \
+    'Back to the menu'
+  case "$MENU_RESULT" in
+    'Download dumbtv'*)
+      if command -v git >/dev/null 2>&1; then
+        local dest="$HOME/dumbtv"
+        if [ -d "$dest/.git" ]; then
+          ok "dumbtv is already at $dest"
+        elif git clone --depth 1 https://github.com/humblemuzzu/dumbtv "$dest" >/dev/null 2>&1; then
+          ok "downloaded to $dest"
+        else
+          warn 'The download failed. Grab the ZIP from github.com/humblemuzzu/dumbtv instead.'
+        fi
+        [ -d "$dest" ] && body "
+Now run:
+
+  cd $dest && ./scripts/all.sh"
+      else
+        warn 'git is not installed here. Download the ZIP from github.com/humblemuzzu/dumbtv instead.'
+      fi
+      pause 'Press Enter to go back...'
+      NEXT='mainmenu' ;;
+    'Back to the menu') NEXT='mainmenu' ;;
+    *) pause 'Press Enter to go back...'; NEXT='mainmenu' ;;
   esac
 }
 
@@ -508,6 +645,7 @@ Waiting for the TV to accept the connection - this is the step that usually need
   [ "$PORT_OK" = 0 ] && tries=8
 
   local state='' line i
+  local waited=0
   for i in $(seq 1 "$tries"); do
     line="$("$ADB" devices | grep -F "${IP}:5555" || true)"
     case "$line" in
@@ -516,11 +654,30 @@ Waiting for the TV to accept the connection - this is the step that usually need
     esac
     printf '.'
     sleep 1
+    waited=$((waited+1))
+    if [ "$waited" -eq 12 ] && [ "$tries" -gt 12 ]; then
+      printf '\n'
+      if ! ask_yes "Still waiting. Keep waiting for the TV? (no = try another address)"; then
+        log_event 'CONNECT' "user gave up waiting"
+        warn 'Stopped waiting.'
+        NEXT='menu_authorise'
+        return
+      fi
+    fi
   done
   printf '\n'
 
   if [ "$state" = 'device' ]; then
-    ok "connected to $IP"
+    local model; model=$(identify_device "$IP")
+    case "$model" in
+      '') warn "Connected, but $IP did not answer as a Fire TV - the address may be something else."
+          adb_do disconnect "$IP:5555"
+          NEXT='menu_ip'; return ;;
+      not-a-fire-tv:*) warn "$IP is ${model#not-a-fire-tv:}, which is not a Fire TV."
+          adb_do disconnect "$IP:5555"
+          NEXT='menu_ip'; return ;;
+    esac
+    ok "connected to $IP ($model)"
     log_event 'CONNECT' "authorised, state=device after ${i}s"
     if [ "$MODE" = 'full' ]; then NEXT='questions'; else NEXT='apply'; fi
     return
@@ -967,6 +1124,7 @@ while :; do
   case "$STAGE" in
     welcome)            stage_welcome ;;
     mainmenu)           stage_mainmenu ;;
+    dumbtv)             stage_dumbtv ;;
     prepare)            stage_prepare ;;
     menu_install)       stage_menu_install ;;
     install_after_scan) stage_install_after_scan ;;

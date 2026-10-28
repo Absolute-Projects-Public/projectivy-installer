@@ -11,6 +11,7 @@
 
 S="${MOCK_STATE:-/tmp/mockad-state}"
 mkdir -p "$S"
+[ "${1:-}" = "-s" ] && { shift 2; }      # adb_sh/adb_do always name the device
 cmd="${1:-}"; shift || true
 
 installed() { [ -f "$S/pkg_$1" ] || [ -f "$S/proj" ] && case "$1" in com.spocky.projengmenu) return 0 ;; esac; [ -f "$S/pkg_$1" ]; }
@@ -55,7 +56,7 @@ case "$cmd" in
   version) echo "Android Debug Bridge version 1.0.41" ;;
   getprop)
     case "$*" in
-      "ro.product.model")            echo "AFTKRT" ;;
+      "ro.product.model")            echo "${MOCK_MODEL:-AFTKRT}" ;;
       "ro.build.version.name")       echo "Fire OS 8.1.8.2 (RS8182/3811)" ;;
       "ro.build.version.fireos")     echo "8.0" ;;
       "ro.build.version.sdk")        echo "31" ;;
@@ -67,7 +68,7 @@ case "$cmd" in
       "getprop ro.build.version.name")   echo "Fire OS 8.1.8.2 (RS8182/3811)" ;;
       "getprop ro.build.version.fireos") echo "8.0" ;;
       "getprop ro.build.version.sdk")    echo "31" ;;
-      "getprop ro.product.model")        echo "AFTKRT" ;;
+      "getprop ro.product.model")        echo "${MOCK_MODEL:-AFTKRT}" ;;
       "pm list packages")
         echo "package:com.amazon.tv.launcher"
         echo "package:com.amazon.venezia"

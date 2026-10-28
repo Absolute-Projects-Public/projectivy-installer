@@ -87,7 +87,7 @@ echo
 
 # ---- A: his reported bug - "Scan the network for a Firestick first" --------
 PRE_INSTALL=0
-run_path "2\n\n3\n1\n1\n$TAIL"
+run_path "1\n2\n\n3\n1\n1\n$TAIL"
 echo "Path A: install decision deferred to a network scan"
 check "scan option is offered"                 "$(contains "$OUT" 'Scan the network for a Firestick first'; echo $?)"
 check "found device is selectable by name"     "$(contains "$OUT" 'Select 192.168.1.100 from scan result'; echo $?)"
@@ -102,7 +102,7 @@ echo
 
 # ---- B: install over ADB chosen up front, scan used later -----------------
 PRE_INSTALL=0
-run_path "2\n\n1\n2\n1\n$TAIL"
+run_path "1\n2\n\n1\n2\n1\n$TAIL"
 echo "Path B: install over ADB chosen first, scan later"
 check "install question asked only once"       "$([ "$(count_of "$OUT" 'How should Projectivy be installed?')" = 1 ]; echo $?)"
 check "installed without asking again"         "$(contains "$OUT" 'Installing Projectivy over ADB, as chosen earlier'; echo $?)"
@@ -111,7 +111,7 @@ echo
 
 # ---- C: "already installed", and it really is -----------------------------
 PRE_INSTALL=1
-run_path "2\n\n2\n1\n192.168.1.100\n\n1\n$DNS_HOST\n\n1\n"
+run_path "1\n2\n\n2\n1\n192.168.1.100\n\n1\n$DNS_HOST\n\n1\n"
 echo "Path C: already installed on the TV (package present)"
 check "package detected"                       "$(contains "$OUT" 'found com.spocky.projengmenu'; echo $?)"
 check "no install menu offered"                "$(not_contains "$OUT" 'How do you want to install it?'; echo $?)"
@@ -120,7 +120,7 @@ echo
 
 # ---- D: "already installed", but it is NOT --------------------------------
 PRE_INSTALL=0
-run_path "2\n\n2\n1\n192.168.1.100\n1\n\n1\n$DNS_HOST\n\n1\n"
+run_path "1\n2\n\n2\n1\n192.168.1.100\n1\n\n1\n$DNS_HOST\n\n1\n"
 echo "Path D: said already installed, but the stick has nothing"
 check "mismatch is reported"                   "$(contains "$OUT" 'even though it was said to be installed already'; echo $?)"
 check "install is then offered"                "$(contains "$OUT" 'How do you want to install it?'; echo $?)"
@@ -130,7 +130,7 @@ echo
 
 # ---- E: blank answer at the IP prompt must not end the wizard -------------
 PRE_INSTALL=0
-run_path "2\n\n1\n1\n\n"
+run_path "1\n2\n\n1\n1\n\n"
 echo "Path E: blank IP, then input runs out"
 check "returns to the connect menu"            "$(contains "$OUT" 'Step 3 of 6'; echo $?)"
 check "stops explicitly, not as 'Finished'"    "$(contains "$OUT" 'Input ended'; echo $?)"
@@ -140,7 +140,7 @@ echo
 # ---- F: debug log ---------------------------------------------------------
 PRE_INSTALL=0
 rm -rf "$TMP/logs"
-run_path "2\n\n1\n1\n192.168.1.100\n$TAIL" --debug
+run_path "1\n2\n\n1\n1\n192.168.1.100\n$TAIL" --debug
 LOG="$(ls "$TMP/logs"/install-projectivy-*.log 2>/dev/null | head -n1)"
 echo "Path F: --debug writes a usable log"
 check "log file created under ./logs/"         "$([ -n "$LOG" ]; echo $?)"
@@ -164,7 +164,7 @@ echo
 
 # ---- G: numbered options are shown ---------------------------------------
 PRE_INSTALL=0
-run_path "2\n\n1\n1\n192.168.1.100\n$TAIL"
+run_path "1\n2\n\n1\n1\n192.168.1.100\n$TAIL"
 echo "Path G: every menu option is numbered"
 check "install menu numbered 1:"               "$(contains "$OUT" '1: Install Projectivy for me over ADB'; echo $?)"
 check "install menu numbered 2:"               "$(contains "$OUT" '2: I have already installed it'; echo $?)"
@@ -176,7 +176,7 @@ echo
 # Real bug from a user log: the stick was sitting in Plex, and the wizard announced "showing Amazon home
 # instead of Projectivy" and pushed them into the Home on Fire fallback. Two cases make the check
 # meaningless rather than failing - another app in the foreground, and no actual power cycle.
-SETUP="2\n\n1\n1\n192.168.1.100\n\n\n"
+SETUP="1\n2\n\n1\n1\n192.168.1.100\n\n\n"
 
 PRE_INSTALL=0; PRE_LONG_UPTIME=0; export MOCK_FOCUS=plex
 run_path "${SETUP}3\n"
@@ -247,7 +247,7 @@ echo
 
 echo "Path L: port 5555 is closed - clear warning, short wait, still ends cleanly"
 PRE_INSTALL=0; PRE_LONG_UPTIME=0; export MOCK_PORT=1
-run_path "2\n\n1\n1\n192.168.1.100\n\n\n"
+run_path "1\n2\n\n1\n1\n192.168.1.100\n\n\n"
 check "warns that the port is not answering"    "$(contains "$OUT" 'Port 5555 is not answering'; echo $?)"
 check "the warning names the address to check"  "$(contains "$OUT" 'check ADB debugging is ON and the address is right'; echo $?)"
 check "still finishes without hanging"          "$(contains "$OUT" 'Done.'; echo $?)"
@@ -256,7 +256,7 @@ echo
 
 echo "Path M: port 5555 answers - no false warning"
 PRE_INSTALL=0; PRE_LONG_UPTIME=0; export MOCK_PORT=0
-run_path "2\n\n1\n1\n192.168.1.100\n\n\n"
+run_path "1\n2\n\n1\n1\n192.168.1.100\n\n\n"
 check "no port warning when the port answers"   "$(not_contains "$OUT" 'Port 5555 is not answering'; echo $?)"
 check "connects and reaches the end"            "$(contains "$OUT" 'Done.'; echo $?)"
 unset MOCK_PORT
@@ -267,7 +267,7 @@ echo
 # prime=y alexa=y launcher=Projectivy dns=on-device smarttube=n apps=none, go, close
 echo "Path N: full cleanup with the default answers"
 SEED_EMPTY=0
-run_path "1\n\n1\n192.168.1.100\ny\ny\n1\n1\nn\n\n1\n1\n"
+run_path "1\n1\n\n1\n192.168.1.100\ny\ny\n1\n1\nn\n\n1\n1\n"
 echo "Path N: full cleanup with the default answers"
 check "asks the six questions"                  "$(contains "$OUT" 'Do you watch Prime Video?'; echo $?)"
 check "default keeps Prime Video"               "$(contains "$OUT" 'Prime Video: kept working'; echo $?)"
@@ -291,7 +291,7 @@ echo
 # ---- O: Alexa off, dumbtv home, no DNS, SmartTube, one app removed --------
 echo "Path O: non-default answers (Alexa off, dumbtv home, no DNS, SmartTube, remove Netflix)"
 SEED_EMPTY=0
-run_path "1\n\n1\n192.168.1.100\nn\nn\n2\n4\ny\nnetflix\n1\n1\n"
+run_path "1\n1\n\n1\n192.168.1.100\nn\nn\n2\n4\ny\nnetflix\n1\n1\n"
 echo "Path O: non-default answers"
 check "Prime Video can be given up"             "$(contains "$OUT" 'will not play'; echo $?)"
 check "Alexa packages are switched off"         "$(contains "$OUT" 'com.amazon.aca'; echo $?)"
@@ -307,7 +307,7 @@ echo
 # ---- P: Fire OS 8 hides the app folder -> media fallback + manual step ----
 echo "Path P: Fire OS 8 hides the app directory, so the media fallback is used"
 SEED_EMPTY=0; export MOCK_APP_DIR=hidden
-run_path "1\n\n1\n192.168.1.100\ny\ny\n1\n1\nn\n\n1\n\n1\n"
+run_path "1\n1\n\n1\n192.168.1.100\ny\ny\n1\n1\nn\n\n1\n\n1\n"
 echo "Path P: media fallback"
 check "explains the manual step on the TV"      "$(contains "$OUT" 'pointed at once on the TV'; echo $?)"
 check "names the file to point the app at"      "$(contains "$OUT" 'Android/media/dnsfilter.android/blocklist.txt'; echo $?)"
@@ -327,7 +327,7 @@ echo
 # ---- R: run the cleanup twice, then undo once: nothing may be left disabled ----
 echo "Path R: two cleanup runs, then a single undo"
 rm -rf "$TMP/state"; mkdir -p "$TMP/state"; seed_device
-SETUP_IN="1\n\n1\n192.168.1.100\ny\ny\n1\n4\nn\n\n1\n1\n"
+SETUP_IN="1\n1\n\n1\n192.168.1.100\ny\ny\n1\n4\nn\n\n1\n1\n"
 OUT="$(printf '%b' "$SETUP_IN" | timeout 120 bash "$TMP/wizard.sh" 2>/dev/null)"
 OUT="$(printf '%b' "$SETUP_IN" | timeout 120 bash "$TMP/wizard.sh" 2>/dev/null)"
 check "second run leaves already-off packages alone" "$(contains "$OUT" 'already off'; echo $?)"
@@ -342,11 +342,21 @@ echo "Path S: choosing dumbtv home disarms Projectivy's Home hook"
 rm -rf "$TMP/state"; mkdir -p "$TMP/state"; seed_device
 touch "$TMP/state/proj"
 printf '%s' "com.spocky.projengmenu/com.spocky.projengmenu.services.ProjectivyAccessibilityService" > "$TMP/state/a11y"
-OUT="$(printf '%b' '1\n\n1\n192.168.1.100\ny\ny\n2\n4\nn\n\n1\n1\n' | timeout 120 bash "$TMP/wizard.sh" 2>/dev/null)"
+OUT="$(printf '%b' '1\n1\n\n1\n192.168.1.100\ny\ny\n2\n4\nn\n\n1\n1\n' | timeout 120 bash "$TMP/wizard.sh" 2>/dev/null)"
 check "says the other launcher was switched off"   "$(contains "$OUT" 'other launcher'; echo $?)"
 check "Projectivy's hook is gone from accessibility" "$(not_contains "$(cat "$TMP/state/a11y" 2>/dev/null)" 'projengmenu'; echo $?)"
 check "dumbtv's hook is enabled instead"           "$(contains "$(cat "$TMP/state/a11y" 2>/dev/null)" 'tv.dumbtv.home.Guard'; echo $?)"
 check "dumbtv home takes the front"                "$(contains "$OUT" 'dumbtv home is the home screen'; echo $?)"
+echo
+
+# ---- T: the dumbtv hand-off ------------------------------------------------
+echo "Path T: handing off to dumbtv"
+rm -rf "$TMP/state"; mkdir -p "$TMP/state"; seed_device
+OUT="$(printf '%b' '2\n2\n\n4\n' | timeout 60 bash "$TMP/wizard.sh" 2>/dev/null)"
+check "names the dumbtv project"                "$(contains "$OUT" 'github.com/humblemuzzu/dumbtv'; echo $?)"
+check "gives the commands to run"               "$(contains "$OUT" './scripts/all.sh'; echo $?)"
+check "mentions their undo path"                "$(contains "$OUT" 'restore.sh'; echo $?)"
+check "leaves the TV alone (nothing disabled)"  "$([ ! -s "$TMP/state/disabled" ]; echo $?)"
 echo
 
 printf 'passed %d, failed %d\n' "$PASS" "$FAIL"

@@ -4,7 +4,14 @@
 [![licence](https://img.shields.io/github/license/Absolute-Projects-Public/projectivy-installer)](LICENSE)
 
 Takes the ads, the tracking and the clutter out of an Amazon Fire TV Stick or Cube running Fire OS 7 or
-8, over ADB, with no root. Two ways to run it:
+8, over ADB, with no root.
+
+The first menu offers **this tool** or **dumbtv's tool**. dumbtv (github.com/humblemuzzu/dumbtv) is where
+the cleanup approach here came from, and its scripts cover more devices than ours do. If this wizard
+struggles with your TV, its scripts are the better bet - the menu hands you the commands, or downloads
+the repository for you. Run them yourself in a terminal; their flow is theirs, and it is well tested.
+
+Inside this tool there are two depths:
 
 - **Home screen only** - install Projectivy Launcher and make it the home screen. About 5 minutes.
 - **Full cleanup** - also disable around 38 Amazon ad, telemetry and experiment packages, starve the ones
@@ -101,6 +108,17 @@ either.
 **Status:** working, verified live on 2026-09-26 against a Fire TV Stick 4K Max: Projectivy as the home
 screen, no ads, Home button redirected, and the settings survived a full power cycle.
 
+### If the scan finds the wrong thing
+
+A VPN on your computer takes the default route, and the first version of this wizard followed it - which
+meant sweeping the VPN's own subnet and cheerfully offering the VPN gateway as "a device on port 5555".
+It now skips VPN and virtual interfaces, scans every real network interface, and names each device it
+finds by its model (`AFTKRT` and friends). Anything that is not a Fire TV is not offered. If nothing is
+found while a VPN is up, it says so and tells you to turn the VPN off, and the wait for the TV can be cut
+short instead of counting down.
+
+Typing the address by hand skips all of that, and is the quickest route when you already know it.
+
 ## What the full cleanup asks
 
 Six questions, every default is the safe one:
@@ -176,7 +194,7 @@ this build depends on the NextDNS route or on finishing those taps.
 - `Install-Projectivy.desktop` - double-click launcher for `Install-Projectivy.sh` (needs `chmod +x` on both, see section 8).
 - `setup-firestick.ps1` - Windows, non-interactive CLI equivalent.
 - `setup-firestick.sh` - Linux/macOS equivalent.
-- `tests/` - the regression suite. `./tests/run-paths.sh` runs 86 checks against a fake adb, so it needs
+- `tests/` - the regression suite. `./tests/run-paths.sh` runs 96 checks against a fake adb, so it needs
   no Fire TV at all.
 - `data/` - the package, setting and host lists the cleanup reads, as plain text.
 - `lib/cleanup.sh` - the cleanup engine: questions, snapshot, debloat, DNS filter, verify, undo.
@@ -617,7 +635,7 @@ choice about whether to intercept the Home key. Both are needed on Fire OS 8.)
 ### Testing without a Fire TV
 
 ```
-./tests/run-paths.sh        # 86 assertions across 17 wizard paths, no adb or device needed
+./tests/run-paths.sh        # 96 assertions across 18 wizard paths, no adb or device needed
 ```
 
 The Windows script has its own suite, which runs anywhere PowerShell 7 is installed:

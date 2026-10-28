@@ -900,12 +900,51 @@ function Connect-Stick {
 
 # ---------------------------------------------------------------- main
 
+function Show-Dumbtv {
+    Step "dumbtv's own tool"
+    Log 'dumbtv (github.com/humblemuzzu/dumbtv) is the project this one learned the cleanup from. Its'
+    Log 'scripts are the reference implementation, tested by owners of about twenty TVs and sticks.'
+    Log ''
+    Log 'It expects a shell rather than a click-through wizard, and its on-device DNS filter still'
+    Log 'needs the same manual step on Fire OS 8. What it has is breadth of device coverage.'
+    Log ''
+    Log 'The commands are:' 'Cyan'
+    Log '  git clone https://github.com/humblemuzzu/dumbtv'
+    Log '  cd dumbtv'
+    Log '  ./scripts/all.sh'
+    Log ''
+    Log 'It asks its own questions and every change is reversible with ./scripts/restore.sh.'
+    Log ''
+    $i = Ask-Choice 'What next?' @('Download dumbtv for me, then I will run it',
+                                   'Just leave me the instructions',
+                                   'Back to the menu')
+    if ($i -eq 0) {
+        $dest = Join-Path $HOME 'dumbtv'
+        if (Test-Path (Join-Path $dest '.git')) {
+            Good "dumbtv is already at $dest"
+        } else {
+            $git = Get-Command git -ErrorAction SilentlyContinue
+            if ($git) {
+                try {
+                    & $git.Source clone --depth 1 https://github.com/humblemuzzu/dumbtv $dest | Out-Null
+                    if (Test-Path $dest) { Good "downloaded to $dest" } else { Warn2 'The download did not complete.' }
+                } catch { Warn2 'The download failed - grab the ZIP from github.com/humblemuzzu/dumbtv.' }
+            } else {
+                Warn2 'git is not installed here. Download the ZIP from github.com/humblemuzzu/dumbtv.'
+            }
+        }
+        if (Test-Path $dest) { Log ''; Log "Now run:  cd `"$dest`"; ./scripts/all.sh" }
+        [void](Read-Reply 'Press Enter to go back')
+    }
+}
+
 function Show-Menu {
     Log ''
     Log 'Fire TV cleanup' 'Cyan'
-    Log '  1: Full cleanup - remove the ads and tracking, replace the home screen, block Amazon'
-    Log '  2: Undo everything - put the TV back how it was'
-    Log '  3: Exit'
+    Log '  1: This tool - remove the ads and tracking, pick a home screen, block Amazon'
+    Log "  2: dumbtv's tool - hand off to the project this one learned from"
+    Log '  3: Undo everything - put the TV back how it was'
+    Log '  4: Exit'
     $reply = Read-Reply 'Select [1]'
     if ([string]::IsNullOrWhiteSpace($reply)) { return 1 }
     $n = 0
@@ -924,8 +963,9 @@ try {
     }
 
     $choice = if ($AnswerScript -or $script:Answers.Count -gt 0) { 1 } else { Show-Menu }
-    if ($choice -eq 2) { Invoke-Undo; exit 0 }
-    if ($choice -eq 3) { exit 0 }
+    if ($choice -eq 2) { Show-Dumbtv; exit 0 }
+    if ($choice -eq 3) { Invoke-Undo; exit 0 }
+    if ($choice -eq 4) { exit 0 }
 
     if (-not (Connect-Stick)) { exit 1 }
     Read-Answers
