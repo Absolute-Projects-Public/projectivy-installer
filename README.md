@@ -160,6 +160,11 @@ ANDROID_SERIAL=<tv-ip>:5555 ./launcher/install.sh     # launcher only
 ANDROID_SERIAL=<tv-ip>:5555 ./scripts/all.sh          # full pass, reboots twice
 ```
 
+SmartTube and the SponsorBlock stall: if a video loads forever exactly where a sponsor segment begins,
+that is upstream yuliskov/SmartTube#5550, fixed after version 32.56. dumbtv's `youtube.sh` pins 32.56, so
+their installer will keep installing the affected build; update SmartTube straight from its release instead
+(armaebi-v7a for 32-bit sets). Nothing is wrong with the TV or the network.
+
 Run their read-only pass before deciding anything on an Android TV. On the BRAVIA 4K UR3 it reported
 `platform: NOT Amazon hardware` and `discover: candidates 0 of 216 packages` - a clean Sony set has
 nothing their Amazon package list should touch, and their DNS filter blocks Amazon telemetry, not
