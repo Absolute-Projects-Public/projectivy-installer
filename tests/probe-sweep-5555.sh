@@ -3,9 +3,9 @@
 set -u
 A=adb
 
-echo "== sweep 192.168.50.0/24 on 5555 =="
+echo "== sweep 192.168.1.0/24 on 5555 =="
 for i in $(seq 1 254); do
-  ( timeout 1 bash -c "echo > /dev/tcp/192.168.50.$i/5555" 2>/dev/null && echo "192.168.50.$i" ) &
+  ( timeout 1 bash -c "echo > /dev/tcp/192.168.1.$i/5555" 2>/dev/null && echo "192.168.1.$i" ) &
 done > /tmp/scan2.txt 2>/dev/null
 wait
 sort -u /tmp/scan2.txt -o /tmp/scan2.sorted 2>/dev/null
