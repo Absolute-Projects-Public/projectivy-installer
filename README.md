@@ -160,10 +160,14 @@ ANDROID_SERIAL=<tv-ip>:5555 ./launcher/install.sh     # launcher only
 ANDROID_SERIAL=<tv-ip>:5555 ./scripts/all.sh          # full pass, reboots twice
 ```
 
-SmartTube and the SponsorBlock stall: if a video loads forever exactly where a sponsor segment begins,
-that is upstream yuliskov/SmartTube#5550, fixed after version 32.56. dumbtv's `youtube.sh` pins 32.56, so
-their installer will keep installing the affected build; update SmartTube straight from its release instead
-(armaebi-v7a for 32-bit sets). Nothing is wrong with the TV or the network.
+SmartTube and the SponsorBlock stall: a video that loads forever exactly where a sponsor segment begins
+is an app bug, not a network or TV fault (the give-away is dropped frames staying at 1 while rendered
+frames climb, so decoding was never the problem). Two upstream threads fit: yuliskov/SmartTube#5419 (the
+buffer does not account for segments that will be skipped, so a skip can empty it) and the playback-stall
+hotfixes. Check the installed build before blaming the device: dumbtv's `youtube.sh` pins 32.56, which is
+old, so their installer keeps handing out an affected version. Update directly from SmartTube's releases
+instead (armeabi-v7a for 32-bit sets), and prefer a build carrying a "playback could get stuck" or
+"stalled clients" hotfix. Verify the download against the release's published sha256.
 
 Run their read-only pass before deciding anything on an Android TV. On the BRAVIA 4K UR3 it reported
 `platform: NOT Amazon hardware` and `discover: candidates 0 of 216 packages` - a clean Sony set has
