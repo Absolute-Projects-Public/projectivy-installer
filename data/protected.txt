@@ -7,6 +7,7 @@
 com.amazon.device.metrics
 com.amazon.device.crashmanager
 com.amazon.device.rdmapplication
+com.amazon.diode
 com.amazon.ftvads.deeplinking
 com.amazon.tv.csapp
 com.amazon.device.software.ota
